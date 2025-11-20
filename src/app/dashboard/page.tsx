@@ -1,8 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import PropertyMap from "@/components/PropertyMap";
 // import { prisma } from "@/lib/prisma"; // Commented out for MVP testing without database
+
+// Calculate distance between two coordinates using Haversine formula
+function calculateDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 3959; // Earth's radius in miles
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
 interface Property {
   id: string;
@@ -33,6 +54,9 @@ interface Property {
 
 export default function DashboardPage() {
   const [properties, setProperties] = useState<Property[]>([]);
+  const [hoveredBusinessId, setHoveredBusinessId] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     // Load properties from localStorage
@@ -85,19 +109,19 @@ export default function DashboardPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="space-y-8">
             {properties.map((property: Property) => (
               <div
                 key={property.id}
                 className="bg-white rounded-lg shadow-lg overflow-hidden"
               >
-                <div className="p-6">
-                  <h2 className="text-xl font-bold text-zinc-900 mb-2">
-                    {property.name}
-                  </h2>
-                  <p className="text-sm text-zinc-600 mb-4">
-                    {property.address}
-                  </p>
+                <div className="p-8">
+                  <div className="mb-6">
+                    <h2 className="text-3xl font-bold text-zinc-900 mb-2">
+                      {property.name}
+                    </h2>
+                    <p className="text-lg text-zinc-600">{property.address}</p>
+                  </div>
 
                   {property.propertyTier && (
                     <div className="mb-2">
@@ -157,101 +181,151 @@ export default function DashboardPage() {
                     </a>
                   )}
 
+                  {/* Map */}
+                  {property.latitude && property.longitude && (
+                    <div className="mt-6 pt-6 border-t border-zinc-200">
+                      <p className="text-sm font-semibold text-zinc-700 mb-4">
+                        Location Map:
+                      </p>
+                      <PropertyMap
+                        propertyName={property.name}
+                        propertyAddress={property.address}
+                        latitude={property.latitude}
+                        longitude={property.longitude}
+                        nearbyBusinesses={property.nearbyBusinesses || []}
+                        hoveredBusinessId={hoveredBusinessId}
+                      />
+                    </div>
+                  )}
+
                   {property.nearbyBusinesses &&
                     property.nearbyBusinesses.length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-zinc-200">
-                        <p className="text-xs font-semibold text-zinc-600 mb-3">
+                      <div className="mt-6 pt-6 border-t border-zinc-200">
+                        <p className="text-sm font-semibold text-zinc-700 mb-4">
                           Nearby Businesses ({property.nearbyBusinesses.length}
                           ):
                         </p>
-                        <div className="space-y-3 max-h-96 overflow-y-auto">
-                          {property.nearbyBusinesses.map((business, idx) => (
-                            <div
-                              key={idx}
-                              className="bg-zinc-50 rounded-lg p-3 border border-zinc-200"
-                            >
-                              <div className="flex items-start justify-between mb-1">
-                                <h4 className="text-sm font-semibold text-zinc-900">
-                                  {business.name}
-                                </h4>
-                                {business.rating && (
-                                  <div className="flex items-center gap-1 ml-2">
-                                    <span className="text-yellow-500">⭐</span>
-                                    <span className="text-xs font-medium text-zinc-700">
-                                      {business.rating.toFixed(1)}
-                                    </span>
-                                    {business.userRatingsTotal && (
-                                      <span className="text-xs text-zinc-500">
-                                        (
-                                        {business.userRatingsTotal.toLocaleString()}
-                                        )
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto">
+                          {property.nearbyBusinesses.map((business, idx) => {
+                            const businessId =
+                              business.placeId || `business-${idx}`;
+                            return (
+                              <div
+                                key={idx}
+                                className={`bg-zinc-50 rounded-lg p-4 border-2 transition-all cursor-pointer ${
+                                  hoveredBusinessId === businessId
+                                    ? "border-blue-500 bg-blue-100 shadow-lg scale-105"
+                                    : "border-zinc-200"
+                                }`}
+                                onMouseEnter={() =>
+                                  setHoveredBusinessId(businessId)
+                                }
+                                onMouseLeave={() => setHoveredBusinessId(null)}
+                              >
+                                <div className="flex items-start justify-between mb-1">
+                                  <h4 className="text-sm font-semibold text-zinc-900">
+                                    {business.name}
+                                  </h4>
+                                  {business.rating && (
+                                    <div className="flex items-center gap-1 ml-2">
+                                      <span className="text-yellow-500">
+                                        ⭐
                                       </span>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-
-                              {business.vicinity && (
-                                <p className="text-xs text-zinc-600 mb-2">
-                                  📍 {business.vicinity}
-                                </p>
-                              )}
-
-                              {business.types && business.types.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mb-2">
-                                  {business.types
-                                    .filter(
-                                      (type: string) =>
-                                        ![
-                                          "establishment",
-                                          "point_of_interest",
-                                          "geocode",
-                                        ].includes(type)
-                                    )
-                                    .slice(0, 3)
-                                    .map((type: string, typeIdx: number) => (
-                                      <span
-                                        key={typeIdx}
-                                        className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs capitalize"
-                                      >
-                                        {type.replace(/_/g, " ")}
+                                      <span className="text-xs font-medium text-zinc-700">
+                                        {business.rating.toFixed(1)}
                                       </span>
-                                    ))}
+                                      {business.userRatingsTotal && (
+                                        <span className="text-xs text-zinc-500">
+                                          (
+                                          {business.userRatingsTotal.toLocaleString()}
+                                          )
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
 
-                              {business.priceLevel !== null &&
-                                business.priceLevel !== undefined && (
-                                  <p className="text-xs text-zinc-600">
-                                    💰 Price:{" "}
-                                    {"$".repeat(business.priceLevel + 1)}
-                                    {business.priceLevel === 0 && " (Free)"}
+                                {business.vicinity && (
+                                  <p className="text-xs text-zinc-600 mb-1">
+                                    📍 {business.vicinity}
                                   </p>
                                 )}
 
-                              {business.businessStatus && (
-                                <p className="text-xs mt-1">
-                                  <span
-                                    className={`font-medium ${
-                                      business.businessStatus === "OPERATIONAL"
-                                        ? "text-green-600"
+                                {property.latitude &&
+                                  property.longitude &&
+                                  business.geometry?.location && (
+                                    <p className="text-xs text-zinc-600 mb-2 font-medium">
+                                      📏{" "}
+                                      {calculateDistance(
+                                        property.latitude,
+                                        property.longitude,
+                                        business.geometry.location.lat,
+                                        business.geometry.location.lng
+                                      ).toFixed(2)}{" "}
+                                      miles away
+                                    </p>
+                                  )}
+
+                                {business.types &&
+                                  business.types.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mb-2">
+                                      {business.types
+                                        .filter(
+                                          (type: string) =>
+                                            ![
+                                              "establishment",
+                                              "point_of_interest",
+                                              "geocode",
+                                            ].includes(type)
+                                        )
+                                        .slice(0, 3)
+                                        .map(
+                                          (type: string, typeIdx: number) => (
+                                            <span
+                                              key={typeIdx}
+                                              className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs capitalize"
+                                            >
+                                              {type.replace(/_/g, " ")}
+                                            </span>
+                                          )
+                                        )}
+                                    </div>
+                                  )}
+
+                                {business.priceLevel !== null &&
+                                  business.priceLevel !== undefined && (
+                                    <p className="text-xs text-zinc-600">
+                                      💰 Price:{" "}
+                                      {"$".repeat(business.priceLevel + 1)}
+                                      {business.priceLevel === 0 && " (Free)"}
+                                    </p>
+                                  )}
+
+                                {business.businessStatus && (
+                                  <p className="text-xs mt-1">
+                                    <span
+                                      className={`font-medium ${
+                                        business.businessStatus ===
+                                        "OPERATIONAL"
+                                          ? "text-green-600"
+                                          : business.businessStatus ===
+                                            "CLOSED_TEMPORARILY"
+                                          ? "text-yellow-600"
+                                          : "text-red-600"
+                                      }`}
+                                    >
+                                      {business.businessStatus === "OPERATIONAL"
+                                        ? "✓ Open"
                                         : business.businessStatus ===
                                           "CLOSED_TEMPORARILY"
-                                        ? "text-yellow-600"
-                                        : "text-red-600"
-                                    }`}
-                                  >
-                                    {business.businessStatus === "OPERATIONAL"
-                                      ? "✓ Open"
-                                      : business.businessStatus ===
-                                        "CLOSED_TEMPORARILY"
-                                      ? "⚠ Temporarily Closed"
-                                      : "✗ Closed"}
-                                  </span>
-                                </p>
-                              )}
-                            </div>
-                          ))}
+                                        ? "⚠ Temporarily Closed"
+                                        : "✗ Closed"}
+                                    </span>
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
