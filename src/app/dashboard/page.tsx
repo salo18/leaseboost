@@ -1,0 +1,266 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+// import { prisma } from "@/lib/prisma"; // Commented out for MVP testing without database
+
+interface Property {
+  id: string;
+  name: string;
+  address: string;
+  latitude: number | null;
+  longitude: number | null;
+  websiteUrl: string | null;
+  unitMixFileUrl: string | null;
+  amenities: string[];
+  propertyTier: string | null;
+  residentPersona: string | null;
+  profileSummary: string | null;
+  nearbyBusinesses?: Array<{
+    name: string;
+    types: string[];
+    rating: number | null;
+    userRatingsTotal: number | null;
+    vicinity: string;
+    placeId: string | null;
+    priceLevel: number | null;
+    businessStatus: string | null;
+    geometry: any | null;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export default function DashboardPage() {
+  const [properties, setProperties] = useState<Property[]>([]);
+
+  useEffect(() => {
+    // Load properties from localStorage
+    const savedProperties = JSON.parse(
+      localStorage.getItem("properties") || "[]"
+    );
+    setProperties(savedProperties);
+  }, []);
+
+  // TODO: Uncomment below when database is set up
+  /*
+  async function getProperties() {
+    try {
+      const properties = await prisma.property.findMany({
+        orderBy: { createdAt: "desc" },
+      });
+      return properties;
+    } catch (error) {
+      console.error("Error fetching properties:", error);
+      return [];
+    }
+  }
+  */
+
+  return (
+    <div className="min-h-screen bg-zinc-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-8 flex items-center justify-between">
+          <h1 className="text-3xl font-bold text-zinc-900">
+            Property Dashboard
+          </h1>
+          <Link
+            href="/onboarding"
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Add New Property
+          </Link>
+        </div>
+
+        {properties.length === 0 ? (
+          <div className="bg-white rounded-lg shadow p-12 text-center">
+            <p className="text-zinc-600 mb-4">
+              No properties yet. Get started by adding your first property!
+            </p>
+            <Link
+              href="/onboarding"
+              className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Add Property
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {properties.map((property: Property) => (
+              <div
+                key={property.id}
+                className="bg-white rounded-lg shadow-lg overflow-hidden"
+              >
+                <div className="p-6">
+                  <h2 className="text-xl font-bold text-zinc-900 mb-2">
+                    {property.name}
+                  </h2>
+                  <p className="text-sm text-zinc-600 mb-4">
+                    {property.address}
+                  </p>
+
+                  {property.propertyTier && (
+                    <div className="mb-2">
+                      <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">
+                        {property.propertyTier}
+                      </span>
+                    </div>
+                  )}
+
+                  {property.residentPersona && (
+                    <div className="mb-4">
+                      <span className="inline-block px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-semibold">
+                        {property.residentPersona}
+                      </span>
+                    </div>
+                  )}
+
+                  {property.profileSummary && (
+                    <p className="text-sm text-zinc-700 mb-4 line-clamp-3">
+                      {property.profileSummary}
+                    </p>
+                  )}
+
+                  {property.amenities.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-xs font-semibold text-zinc-600 mb-2">
+                        Amenities:
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {property.amenities
+                          .slice(0, 3)
+                          .map((amenity: string) => (
+                            <span
+                              key={amenity}
+                              className="px-2 py-1 bg-zinc-100 text-zinc-700 rounded text-xs"
+                            >
+                              {amenity}
+                            </span>
+                          ))}
+                        {property.amenities.length > 3 && (
+                          <span className="px-2 py-1 text-zinc-500 text-xs">
+                            +{property.amenities.length - 3} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {property.websiteUrl && (
+                    <a
+                      href={property.websiteUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:underline"
+                    >
+                      Visit Website →
+                    </a>
+                  )}
+
+                  {property.nearbyBusinesses &&
+                    property.nearbyBusinesses.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-zinc-200">
+                        <p className="text-xs font-semibold text-zinc-600 mb-3">
+                          Nearby Businesses ({property.nearbyBusinesses.length}
+                          ):
+                        </p>
+                        <div className="space-y-3 max-h-96 overflow-y-auto">
+                          {property.nearbyBusinesses.map((business, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-zinc-50 rounded-lg p-3 border border-zinc-200"
+                            >
+                              <div className="flex items-start justify-between mb-1">
+                                <h4 className="text-sm font-semibold text-zinc-900">
+                                  {business.name}
+                                </h4>
+                                {business.rating && (
+                                  <div className="flex items-center gap-1 ml-2">
+                                    <span className="text-yellow-500">⭐</span>
+                                    <span className="text-xs font-medium text-zinc-700">
+                                      {business.rating.toFixed(1)}
+                                    </span>
+                                    {business.userRatingsTotal && (
+                                      <span className="text-xs text-zinc-500">
+                                        (
+                                        {business.userRatingsTotal.toLocaleString()}
+                                        )
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              {business.vicinity && (
+                                <p className="text-xs text-zinc-600 mb-2">
+                                  📍 {business.vicinity}
+                                </p>
+                              )}
+
+                              {business.types && business.types.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mb-2">
+                                  {business.types
+                                    .filter(
+                                      (type: string) =>
+                                        ![
+                                          "establishment",
+                                          "point_of_interest",
+                                          "geocode",
+                                        ].includes(type)
+                                    )
+                                    .slice(0, 3)
+                                    .map((type: string, typeIdx: number) => (
+                                      <span
+                                        key={typeIdx}
+                                        className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs capitalize"
+                                      >
+                                        {type.replace(/_/g, " ")}
+                                      </span>
+                                    ))}
+                                </div>
+                              )}
+
+                              {business.priceLevel !== null &&
+                                business.priceLevel !== undefined && (
+                                  <p className="text-xs text-zinc-600">
+                                    💰 Price:{" "}
+                                    {"$".repeat(business.priceLevel + 1)}
+                                    {business.priceLevel === 0 && " (Free)"}
+                                  </p>
+                                )}
+
+                              {business.businessStatus && (
+                                <p className="text-xs mt-1">
+                                  <span
+                                    className={`font-medium ${
+                                      business.businessStatus === "OPERATIONAL"
+                                        ? "text-green-600"
+                                        : business.businessStatus ===
+                                          "CLOSED_TEMPORARILY"
+                                        ? "text-yellow-600"
+                                        : "text-red-600"
+                                    }`}
+                                  >
+                                    {business.businessStatus === "OPERATIONAL"
+                                      ? "✓ Open"
+                                      : business.businessStatus ===
+                                        "CLOSED_TEMPORARILY"
+                                      ? "⚠ Temporarily Closed"
+                                      : "✗ Closed"}
+                                  </span>
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
