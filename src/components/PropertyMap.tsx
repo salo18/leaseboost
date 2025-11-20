@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   GoogleMap,
   LoadScript,
@@ -57,10 +57,32 @@ export default function PropertyMap({
   nearbyBusinesses,
   hoveredBusinessId = null,
 }: PropertyMapProps) {
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY || "";
+  const [apiKey, setApiKey] = useState<string>("");
   const [selectedMarker, setSelectedMarker] = useState<string | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [hoveredIcon, setHoveredIcon] = useState<any>(null);
+
+  // Fetch Maps API key from server (proxy through API route)
+  // This keeps the API key server-side and only exposes it when needed
+  useEffect(() => {
+    fetch("/api/maps/config")
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`Failed to fetch map config: ${res.status}`);
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (data.apiKey) {
+          setApiKey(data.apiKey);
+        } else if (data.error) {
+          console.error("Maps API key error:", data.error);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to load Maps API key:", error);
+      });
+  }, []);
 
   // Property location (center of map)
   const propertyCenter = useMemo(() => {
@@ -282,10 +304,7 @@ export default function PropertyMap({
         </LoadScript>
       ) : (
         <div className="w-full h-full bg-zinc-100 flex items-center justify-center">
-          <p className="text-zinc-500 text-sm">
-            Google Maps API key not configured. Add
-            NEXT_PUBLIC_GOOGLE_PLACES_API_KEY to .env
-          </p>
+          <p className="text-zinc-500 text-sm">Loading map...</p>
         </div>
       )}
     </div>

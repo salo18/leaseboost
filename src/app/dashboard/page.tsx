@@ -52,10 +52,38 @@ interface Property {
   updatedAt: string;
 }
 
+interface Event {
+  id: string;
+  name: string;
+  description: string;
+  start: string | null;
+  end: string | null;
+  timezone?: string;
+  url: string | null;
+  venue: {
+    name: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+  } | null;
+  online_event: boolean;
+  is_free: boolean | null;
+  has_available_tickets: boolean | null;
+  logo: string | null;
+  rating?: number | null;
+  types?: string[];
+}
+
 export default function DashboardPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [hoveredBusinessId, setHoveredBusinessId] = useState<string | null>(
     null
+  );
+  const [eventsByProperty, setEventsByProperty] = useState<
+    Record<string, Event[]>
+  >({});
+  const [loadingEvents, setLoadingEvents] = useState<Record<string, boolean>>(
+    {}
   );
 
   useEffect(() => {
@@ -65,6 +93,66 @@ export default function DashboardPage() {
     );
     setProperties(savedProperties);
   }, []);
+
+  const handleGenerateEvents = async (property: Property) => {
+    if (!property.latitude || !property.longitude) {
+      alert("Property location is required to generate events");
+      return;
+    }
+
+    setLoadingEvents((prev) => ({ ...prev, [property.id]: true }));
+
+    try {
+      console.log(
+        `🔍 [Dashboard] Fetching events for property: ${property.name}`
+      );
+      console.log(
+        `📍 [Dashboard] Location: ${property.latitude}, ${property.longitude}`
+      );
+
+      const response = await fetch(
+        `/api/events?lat=${property.latitude}&lng=${property.longitude}&radius=10`
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch events");
+      }
+
+      const data = await response.json();
+      console.log(`📥 [Dashboard] Received events data:`, data);
+      console.log(
+        `📊 [Dashboard] Number of events: ${data.events?.length || 0}`
+      );
+      console.log(`📋 [Dashboard] Events:`, data.events);
+
+      setEventsByProperty((prev) => ({
+        ...prev,
+        [property.id]: data.events || [],
+      }));
+    } catch (error) {
+      console.error("❌ [Dashboard] Error fetching events:", error);
+      alert("Failed to fetch events. Please try again.");
+    } finally {
+      setLoadingEvents((prev) => ({ ...prev, [property.id]: false }));
+    }
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return "Date TBD";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-US", {
+        weekday: "short",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    } catch {
+      return dateString;
+    }
+  };
 
   // TODO: Uncomment below when database is set up
   /*
@@ -180,6 +268,139 @@ export default function DashboardPage() {
                       Visit Website →
                     </a>
                   )}
+
+                  {/* Generate Events Button */}
+                  {property.latitude && property.longitude && (
+                    <div className="mt-4 mb-4">
+                      <button
+                        onClick={() => handleGenerateEvents(property)}
+                        disabled={loadingEvents[property.id]}
+                        className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {loadingEvents[property.id]
+                          ? "Loading Events..."
+                          : "Generate Events"}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Events Display */}
+                  {eventsByProperty[property.id] &&
+                    eventsByProperty[property.id].length > 0 && (
+                      <div className="mt-6 pt-6 border-t border-zinc-200">
+                        <p className="text-sm font-semibold text-zinc-700 mb-4">
+                          Local Events ({eventsByProperty[property.id].length}):
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto">
+                          {eventsByProperty[property.id].map((event) => (
+                            <div
+                              key={event.id}
+                              className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-4 border-2 border-purple-200 hover:border-purple-400 transition-all"
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <h4 className="text-sm font-semibold text-zinc-900 flex-1">
+                                  {event.name}
+                                </h4>
+                                {event.logo && (
+                                  <img
+                                    src={event.logo}
+                                    alt={event.name}
+                                    className="w-12 h-12 rounded object-cover ml-2"
+                                  />
+                                )}
+                              </div>
+
+                              {event.start && (
+                                <p className="text-xs text-zinc-700 mb-1 font-medium">
+                                  📅 {formatDate(event.start)}
+                                  {event.end && ` - ${formatDate(event.end)}`}
+                                </p>
+                              )}
+
+                              {event.venue && (
+                                <p className="text-xs text-zinc-600 mb-1">
+                                  📍 {event.venue.name}
+                                  {event.venue.address &&
+                                    ` - ${event.venue.address}`}
+                                </p>
+                              )}
+
+                              {property.latitude &&
+                                property.longitude &&
+                                event.venue && (
+                                  <p className="text-xs text-zinc-600 mb-2 font-medium">
+                                    📏{" "}
+                                    {calculateDistance(
+                                      property.latitude,
+                                      property.longitude,
+                                      event.venue.latitude,
+                                      event.venue.longitude
+                                    ).toFixed(2)}{" "}
+                                    miles away
+                                  </p>
+                                )}
+
+                              {event.description && (
+                                <p className="text-xs text-zinc-600 mb-2 line-clamp-2">
+                                  {event.description}
+                                </p>
+                              )}
+
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {event.is_free !== null && (
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                      event.is_free
+                                        ? "bg-green-100 text-green-700"
+                                        : "bg-yellow-100 text-yellow-700"
+                                    }`}
+                                  >
+                                    {event.is_free ? "🆓 Free" : "💰 Paid"}
+                                  </span>
+                                )}
+
+                                {event.online_event && (
+                                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                    🌐 Online
+                                  </span>
+                                )}
+
+                                {event.has_available_tickets !== null && (
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                      event.has_available_tickets
+                                        ? "bg-green-100 text-green-700"
+                                        : "bg-red-100 text-red-700"
+                                    }`}
+                                  >
+                                    {event.has_available_tickets
+                                      ? "✅ Tickets Available"
+                                      : "❌ Sold Out"}
+                                  </span>
+                                )}
+
+                                {event.rating && (
+                                  <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">
+                                    ⭐ {event.rating.toFixed(1)}
+                                  </span>
+                                )}
+                              </div>
+
+                              {event.url && (
+                                <a
+                                  href={event.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-purple-600 hover:underline mt-2 inline-block"
+                                >
+                                  Learn More →
+                                </a>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                   {/* Map */}
                   {property.latitude && property.longitude && (
