@@ -16,6 +16,396 @@ export async function GET(request: NextRequest) {
 
     // Convert radius from miles to meters (most APIs use meters)
     const radiusMeters = Math.round(parseFloat(radius) * 1609);
+    const radiusKm = parseFloat(radius);
+
+    let allEvents: any[] = [];
+
+    // USDA Farmers Market Directory API - COMMENTED OUT (certificate expired)
+    /*
+    // Try USDA Farmers Market Directory API first (free, no API key needed)
+    // USDA provides farmers market data via data.gov
+    // NOTE: The USDA API endpoint has certificate issues - commented out for now
+    let usdaMarkets: any[] = [];
+    try {
+      console.log(`🔍 [Events API] Trying USDA Farmers Market Directory...`);
+
+      // USDA Farmers Market Directory API endpoint
+      // The API endpoint format: https://search.ams.usda.gov/farmersmarkets/v1/data.svc/locSearch?lat={lat}&lng={lng}
+      const usdaUrl = `https://search.ams.usda.gov/farmersmarkets/v1/data.svc/locSearch?lat=${lat}&lng=${lng}`;
+
+      const usdaResponse = await fetch(usdaUrl, {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (usdaResponse.ok) {
+        const usdaData = await usdaResponse.json();
+
+        // USDA returns data in format: { results: [{ id, marketname, ... }] }
+        if (usdaData.results && Array.isArray(usdaData.results)) {
+          console.log(
+            `✅ [Events API] USDA returned ${usdaData.results.length} farmers markets`
+          );
+
+          // Filter by distance and format events
+          const farmersMarkets = usdaData.results
+            .map((market: any) => {
+              // Calculate distance if coordinates available
+              let distance = null;
+              if (market.latitude && market.longitude) {
+                const R = 3959; // Earth's radius in miles
+                const dLat =
+                  ((parseFloat(market.latitude) - parseFloat(lat)) * Math.PI) /
+                  180;
+                const dLon =
+                  ((parseFloat(market.longitude) - parseFloat(lng)) * Math.PI) /
+                  180;
+                const a =
+                  Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos((parseFloat(lat) * Math.PI) / 180) *
+                    Math.cos((parseFloat(market.latitude) * Math.PI) / 180) *
+                    Math.sin(dLon / 2) *
+                    Math.sin(dLon / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                distance = R * c;
+              }
+
+              return {
+                id: market.id || `usda-${market.marketname}`,
+                name: market.marketname || "Farmers Market",
+                description: market.Address || market.address || "",
+                start: null, // USDA doesn't provide specific event dates
+                end: null,
+                url: market.website || market.Website || null,
+                venue: {
+                  name: market.marketname || "Farmers Market",
+                  address: market.Address || market.address || "",
+                  latitude: parseFloat(market.latitude) || parseFloat(lat),
+                  longitude: parseFloat(market.longitude) || parseFloat(lng),
+                },
+                online_event: false,
+                is_free: true, // Farmers markets are typically free to attend
+                has_available_tickets: null,
+                logo: null,
+                rating: null,
+                types: ["farmers_market", "market", "community"],
+                distance: distance,
+              };
+            })
+            .filter((market: any) => {
+              // Filter by radius
+              if (market.distance !== null) {
+                return market.distance <= radiusKm;
+              }
+              return true; // Include if distance unknown
+            })
+            .sort((a: any, b: any) => {
+              // Sort by distance
+              if (a.distance === null) return 1;
+              if (b.distance === null) return -1;
+              return a.distance - b.distance;
+            });
+
+          if (farmersMarkets.length > 0) {
+            console.log(
+              `📋 [Events API] Filtered to ${farmersMarkets.length} farmers markets within ${radiusKm} miles`
+            );
+
+            // Format for response (remove distance from final output)
+            const formattedMarkets = farmersMarkets.map((market: any) => {
+              const { distance, ...rest } = market;
+              return rest;
+            });
+
+            // Also try PredictHQ for additional events
+            const allEvents = [...formattedMarkets];
+
+            // Try PredictHQ API (if token provided)
+            const predicthqToken = process.env.PREDICTHQ_ACCESS_TOKEN;
+
+            if (predicthqToken) {
+              try {
+                console.log(`🔍 [Events API] Trying PredictHQ API...`);
+
+                // PredictHQ Events API
+                // Format: within="10mi@lat,lng" for radius search
+                const predicthqUrl = `https://api.predicthq.com/v1/events/?within=${radiusKm}mi@${lat},${lng}&start.gte=${
+                  new Date().toISOString().split("T")[0]
+                }&limit=20`;
+
+                const phqResponse = await fetch(predicthqUrl, {
+                  headers: {
+                    Authorization: `Bearer ${predicthqToken}`,
+                    Accept: "application/json",
+                  },
+                });
+
+                if (phqResponse.ok) {
+                  const phqData = await phqResponse.json();
+
+                  if (phqData.results && Array.isArray(phqData.results)) {
+                    console.log(
+                      `✅ [Events API] PredictHQ returned ${phqData.results.length} events`
+                    );
+
+                    // Don't filter PredictHQ events too strictly - show all events
+                    const phqEvents = phqData.results.map((event: any) => ({
+                      id: `phq-${event.id}`,
+                      name: event.title || "Event",
+                      description: event.description || "",
+                      start: event.start || null,
+                      end: event.end || null,
+                      url: event.phq_attendance?.url || null,
+                      venue:
+                        event.location && event.location.length > 0
+                          ? {
+                              name: event.location[0].display_name || "",
+                              address: event.location[0].address || "",
+                              latitude:
+                                event.location[0].lat || parseFloat(lat),
+                              longitude:
+                                event.location[0].lon || parseFloat(lng),
+                            }
+                          : null,
+                      online_event: event.online_event || false,
+                      is_free: null,
+                      has_available_tickets: null,
+                      logo: event.phq_attendance?.image_url || null,
+                      rating: event.phq_attendance?.predicted_attendance
+                        ? Math.min(
+                            5,
+                            event.phq_attendance.predicted_attendance / 1000
+                          )
+                        : null,
+                      types: [event.category || "event"],
+                    }));
+
+                    allEvents.push(...phqEvents);
+                  }
+                } else {
+                  const errorData = await phqResponse.json();
+                  console.log(`⚠️ [Events API] PredictHQ error:`, errorData);
+                }
+              } catch (error) {
+                console.error(`❌ [Events API] PredictHQ error:`, error);
+              }
+            }
+
+            if (allEvents.length > 0) {
+              return NextResponse.json({
+                events: allEvents.slice(0, 20),
+                source: "usda_predictHQ",
+              });
+            }
+          }
+        }
+      } else {
+        console.log(
+          `⚠️ [Events API] USDA API returned status: ${usdaResponse.status}`
+        );
+      }
+    } catch (error) {
+      console.error(`❌ [Events API] USDA API error:`, error);
+    }
+    */
+
+    // Try PredictHQ API standalone (if token provided and USDA didn't work)
+    const predicthqToken = process.env.PREDICTHQ_ACCESS_TOKEN;
+
+    if (predicthqToken) {
+      try {
+        // console.log(`🔍 [Events API] Trying PredictHQ API...`);
+
+        // PredictHQ Events API
+        // Filter for events happening in the next 30 days (this month)
+        const today = new Date();
+        const nextMonth = new Date();
+        nextMonth.setDate(today.getDate() + 30);
+
+        const startDate = today.toISOString().split("T")[0];
+        const endDate = nextMonth.toISOString().split("T")[0];
+
+        const predicthqUrl = `https://api.predicthq.com/v1/events/?within=${radiusKm}mi@${lat},${lng}&start.gte=${startDate}&start.lte=${endDate}&limit=100`;
+
+        // console.log(`🔍 [Events API] PredictHQ URL: ${predicthqUrl}`);
+        // console.log(`📅 [Events API] Date range: ${startDate} to ${endDate}`);
+
+        const phqResponse = await fetch(predicthqUrl, {
+          headers: {
+            Authorization: `Bearer ${predicthqToken}`,
+            Accept: "application/json",
+          },
+        });
+
+        if (phqResponse.ok) {
+          const phqData = await phqResponse.json();
+
+          // Log full PredictHQ response for inspection
+          // console.log(
+          //   `📊 [Events API] PredictHQ full response:`,
+          //   JSON.stringify(phqData, null, 2)
+          // );
+          // console.log(
+          //   `📊 [Events API] PredictHQ results count:`,
+          //   phqData.results?.length || 0
+          // );
+
+          if (phqData.results && Array.isArray(phqData.results)) {
+            // console.log(
+            //   `✅ [Events API] PredictHQ returned ${phqData.results.length} events`
+            // );
+
+            // Log first event structure to see what data is available
+            // if (phqData.results.length > 0) {
+            //   console.log(
+            //     `📋 [Events API] Sample PredictHQ event:`,
+            //     JSON.stringify(phqData.results[0], null, 2)
+            //   );
+            // }
+
+            // Map events and include all available data
+            const events = phqData.results.map((event: any) => {
+              // Log URL fields to see what's available
+              // const urlFields = {
+              //   event_url: event.url,
+              //   phq_attendance_url: event.phq_attendance?.url,
+              //   entity_url: event.entity?.url,
+              //   entities: event.entities?.map((e: any) => ({
+              //     type: e.type,
+              //     url: e.url,
+              //     name: e.name,
+              //   })),
+              //   all_fields: Object.keys(event), // Log all available fields
+              // };
+              // console.log(
+              //   `🔗 [Events API] Event "${event.title}" URL fields:`,
+              //   JSON.stringify(urlFields, null, 2)
+              // );
+
+              // PredictHQ API does NOT return direct event URLs
+              // We need to find external URLs from entities or construct a search URL
+
+              // First, try to find external URLs from entities (venues, organizations, etc.)
+              // These might point to Ticketmaster, Eventbrite, venue websites, etc.
+              let eventUrl: string | null = null;
+
+              if (event.entities && Array.isArray(event.entities)) {
+                // Look for URLs in entities that are NOT PredictHQ internal URLs
+                const externalEntity = event.entities.find((e: any) => {
+                  if (!e.url) return false;
+                  // Accept URLs that are NOT PredictHQ internal domains
+                  return (
+                    !e.url.includes("predicthq.com") &&
+                    !e.url.includes("cf-origin") &&
+                    (e.url.startsWith("http://") ||
+                      e.url.startsWith("https://"))
+                  );
+                });
+
+                if (externalEntity?.url) {
+                  eventUrl = externalEntity.url;
+                  // console.log(
+                  //   `✅ [Events API] Found external URL from entity "${externalEntity.type}": ${eventUrl}`
+                  // );
+                }
+              }
+
+              // Also check phq_attendance.url but filter out PredictHQ internal URLs
+              if (!eventUrl && event.phq_attendance?.url) {
+                const phqUrl = event.phq_attendance.url;
+                if (
+                  !phqUrl.includes("predicthq.com") &&
+                  !phqUrl.includes("cf-origin")
+                ) {
+                  eventUrl = phqUrl;
+                  // console.log(
+                  //   `✅ [Events API] Found URL from phq_attendance: ${eventUrl}`
+                  // );
+                }
+              }
+
+              // If no external URL found, create a Google search URL for the event
+              // This helps users quickly find the actual event page
+              if (!eventUrl && event.title) {
+                const venueName =
+                  event.entities?.find((e: any) => e.type === "venue")?.name ||
+                  event.geo?.address?.locality ||
+                  "";
+                const dateStr = event.start_local
+                  ? new Date(event.start_local).toLocaleDateString("en-US", {
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    })
+                  : "";
+                const searchQuery = encodeURIComponent(
+                  `${event.title} ${venueName} ${dateStr}`.trim()
+                );
+                eventUrl = `https://www.google.com/search?q=${searchQuery}`;
+                // console.log(
+                //   `🔍 [Events API] No external URL found - created Google search URL: ${eventUrl}`
+                // );
+              }
+
+              return {
+                id: `phq-${event.id}`,
+                name: event.title || "Event",
+                description: event.description || "",
+                start: event.start || null,
+                end: event.end || null,
+                url: eventUrl,
+                venue:
+                  event.location && event.location.length === 2
+                    ? {
+                        // PredictHQ location is [lng, lat] array
+                        name:
+                          event.entities?.find((e: any) => e.type === "venue")
+                            ?.name ||
+                          event.geo?.address?.formatted_address?.split(
+                            ","
+                          )[0] ||
+                          "Event Venue",
+                        address: event.geo?.address?.formatted_address || "",
+                        latitude: event.location[1], // lat is second element
+                        longitude: event.location[0], // lng is first element
+                      }
+                    : null,
+                online_event: event.online_event || false,
+                is_free: null,
+                has_available_tickets: null,
+                logo:
+                  event.phq_attendance?.image_url ||
+                  event.entity?.image_url ||
+                  null,
+                rating: event.phq_attendance?.predicted_attendance
+                  ? Math.min(
+                      5,
+                      event.phq_attendance.predicted_attendance / 1000
+                    )
+                  : null,
+                types: [event.category || "event"],
+              };
+            });
+
+            if (events.length > 0) {
+              // console.log(
+              //   `✅ [Events API] Adding ${events.length} PredictHQ events to allEvents`
+              // );
+              allEvents.push(...events);
+              // console.log(
+              //   `📊 [Events API] Total events in allEvents: ${allEvents.length}`
+              // );
+            }
+          }
+        } else {
+          const errorData = await phqResponse.json();
+          // console.log(`⚠️ [Events API] PredictHQ error:`, errorData);
+        }
+      } catch (error) {
+        console.error(`❌ [Events API] PredictHQ error:`, error);
+      }
+    }
 
     // Try Apify scrapers (if API token provided)
     // NOTE: The "local-event-scraper" generates fictional events - use real scrapers instead:
@@ -340,7 +730,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Try Facebook Events API
+    // Facebook Events API - COMMENTED OUT (not working, requires app review)
+    /*
     // NOTE: Facebook requires app review/approval for event search API access
     // Most apps will get error code 3: "Application does not have the capability"
     // This is expected - we'll fall back to Google Places API
@@ -456,8 +847,10 @@ export async function GET(request: NextRequest) {
         `ℹ️ [Events API] No Facebook access token, falling back to Google Places`
       );
     }
+    */
 
-    // Fallback to Google Places API
+    // Google Places API fallback - COMMENTED OUT to see USDA/PredictHQ results clearly
+    /*
     const googleApiKey = process.env.GOOGLE_PLACES_API_KEY;
 
     if (!googleApiKey) {
@@ -494,7 +887,6 @@ export async function GET(request: NextRequest) {
       "civic center",
     ];
 
-    const allEvents: any[] = [];
     const seenPlaceIds = new Set<string>();
 
     console.log(
@@ -628,6 +1020,38 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       events: uniqueEvents,
       source: "google_places",
+    });
+    */
+
+    // Check if we have any events and return them
+    if (allEvents.length > 0) {
+      // Remove duplicates (no limit - show all events)
+      const uniqueEvents = Array.from(
+        new Map(allEvents.map((event) => [event.id, event])).values()
+      );
+
+      console.log(
+        `🎉 [Events API] Returning ${uniqueEvents.length} unique events`
+      );
+      console.log(
+        `📋 [Events API] Event names:`,
+        uniqueEvents.map((e) => e.name)
+      );
+
+      return NextResponse.json({
+        events: uniqueEvents,
+        source: "predicthq",
+      });
+    }
+
+    // Return empty if no APIs returned results
+    console.log(
+      `ℹ️ [Events API] No events found from USDA or PredictHQ. Google Places fallback is disabled.`
+    );
+    return NextResponse.json({
+      events: [],
+      source: "none",
+      message: "No events found. USDA and PredictHQ APIs returned no results.",
     });
   } catch (error) {
     console.error("Events API error:", error);

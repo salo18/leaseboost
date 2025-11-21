@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import PropertyMap from "@/components/PropertyMap";
+import EventsMap from "@/components/EventsMap";
 
 // Calculate distance between two coordinates using Haversine formula
 function calculateDistance(
@@ -35,6 +36,15 @@ interface Business {
   geometry: any | null;
 }
 
+interface VenueContact {
+  name: string;
+  phone: string | null;
+  website: string | null;
+  address: string;
+  openingHours: string[] | null;
+  googlePlaceId: string | null;
+}
+
 interface Event {
   id: string;
   name: string;
@@ -48,6 +58,7 @@ interface Event {
     latitude: number;
     longitude: number;
   } | null;
+  venueContact?: VenueContact | null;
   online_event: boolean;
   is_free: boolean | null;
   has_available_tickets: boolean | null;
@@ -67,6 +78,7 @@ export default function Home() {
   );
   const [loading, setLoading] = useState(false);
   const [loadingEvents, setLoadingEvents] = useState(false);
+  const [activeTab, setActiveTab] = useState<"location" | "events">("location");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,7 +120,37 @@ export default function Home() {
 
       if (eventsResponse.ok) {
         const eventsData = await eventsResponse.json();
-        setEvents(eventsData.events || []);
+        const fetchedEvents = eventsData.events || [];
+
+        // Step 4: Enrich events with venue contact information
+        if (fetchedEvents.length > 0) {
+          try {
+            const enrichResponse = await fetch("/api/events/enrich", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ events: fetchedEvents }),
+            });
+
+            if (enrichResponse.ok) {
+              const enrichedData = await enrichResponse.json();
+              setEvents(enrichedData.events || fetchedEvents);
+              console.log(
+                `✅ Enriched ${enrichedData.enriched}/${enrichedData.total} events with venue contact info`
+              );
+            } else {
+              // If enrichment fails, still use the events without contact info
+              setEvents(fetchedEvents);
+            }
+          } catch (error) {
+            console.error("Error enriching events:", error);
+            // If enrichment fails, still use the events without contact info
+            setEvents(fetchedEvents);
+          }
+        } else {
+          setEvents([]);
+        }
       }
 
       setLoading(false);
@@ -203,424 +245,620 @@ export default function Home() {
         {/* Results */}
         {latitude && longitude && (
           <div className="space-y-8">
-            {/* Map with Nearby Businesses */}
+            {/* Tabs */}
             <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-slate-200">
-              <div className="p-6 border-b border-slate-200">
-                <h2 className="text-2xl font-bold text-slate-900 mb-1">
-                  {propertyName || "Property Location"}
-                </h2>
-                <p className="text-slate-600">{address}</p>
-              </div>
-              <div className="p-6">
-                <PropertyMap
-                  propertyName={propertyName || address}
-                  propertyAddress={address}
-                  latitude={latitude}
-                  longitude={longitude}
-                  nearbyBusinesses={nearbyBusinesses}
-                  hoveredBusinessId={hoveredBusinessId}
-                />
-              </div>
-            </div>
-
-            {/* Nearby Businesses */}
-            {nearbyBusinesses.length > 0 && (
-              <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-slate-200">
-                <div className="p-6 border-b border-slate-200">
-                  <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                    <svg
-                      className="w-5 h-5 text-blue-600"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                      />
-                    </svg>
-                    Nearby Businesses
-                    <span className="px-2.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                      {nearbyBusinesses.length}
-                    </span>
-                  </h3>
+              <div className="border-b border-slate-200">
+                <div className="flex">
+                  <button
+                    onClick={() => setActiveTab("location")}
+                    className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors duration-200 ${
+                      activeTab === "location"
+                        ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                        />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                        />
+                      </svg>
+                      Location & Businesses
+                      {nearbyBusinesses.length > 0 && (
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                          {nearbyBusinesses.length}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("events")}
+                    className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors duration-200 ${
+                      activeTab === "events"
+                        ? "text-purple-600 border-b-2 border-purple-600 bg-purple-50"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                        />
+                      </svg>
+                      Events
+                      {events.length > 0 && (
+                        <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">
+                          {events.length}
+                        </span>
+                      )}
+                    </div>
+                  </button>
                 </div>
+              </div>
+
+              {/* Location Tab Content */}
+              {activeTab === "location" && (
                 <div className="p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto pr-2">
-                    {nearbyBusinesses.map((business, idx) => {
-                      const businessId = business.placeId || `business-${idx}`;
-                      return (
-                        <div
-                          key={idx}
-                          className={`bg-white rounded-xl p-5 border-2 transition-all duration-200 cursor-pointer ${
-                            hoveredBusinessId === businessId
-                              ? "border-blue-500 bg-blue-50 shadow-lg scale-[1.02]"
-                              : "border-slate-200 hover:border-slate-300 hover:shadow-md"
-                          }`}
-                          onMouseEnter={() => setHoveredBusinessId(businessId)}
-                          onMouseLeave={() => setHoveredBusinessId(null)}
+                  <div className="mb-6">
+                    <h2 className="text-2xl font-bold text-slate-900 mb-1">
+                      {propertyName || "Property Location"}
+                    </h2>
+                    <p className="text-slate-600">{address}</p>
+                  </div>
+
+                  {/* Map */}
+                  <div className="mb-8">
+                    <PropertyMap
+                      propertyName={propertyName || address}
+                      propertyAddress={address}
+                      latitude={latitude}
+                      longitude={longitude}
+                      nearbyBusinesses={nearbyBusinesses}
+                      hoveredBusinessId={hoveredBusinessId}
+                    />
+                  </div>
+
+                  {/* Nearby Businesses */}
+                  {nearbyBusinesses.length > 0 && (
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2 mb-4">
+                        <svg
+                          className="w-5 h-5 text-blue-600"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          <div className="flex items-start justify-between mb-3">
-                            <h4 className="text-base font-bold text-slate-900 leading-tight">
-                              {business.name}
-                            </h4>
-                            {business.rating && (
-                              <div className="flex items-center gap-1 ml-3 bg-yellow-50 px-2 py-1 rounded-lg border border-yellow-200">
-                                <svg
-                                  className="w-4 h-4 text-yellow-500"
-                                  fill="currentColor"
-                                  viewBox="0 0 20 20"
-                                >
-                                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                </svg>
-                                <span className="text-xs font-bold text-slate-900">
-                                  {business.rating.toFixed(1)}
-                                </span>
-                                {business.userRatingsTotal && (
-                                  <span className="text-xs text-slate-500">
-                                    (
-                                    {business.userRatingsTotal.toLocaleString()}
-                                    )
-                                  </span>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                          />
+                        </svg>
+                        Nearby Businesses
+                        <span className="px-2.5 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                          {nearbyBusinesses.length}
+                        </span>
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto pr-2">
+                        {nearbyBusinesses.map((business, idx) => {
+                          const businessId =
+                            business.placeId || `business-${idx}`;
+                          return (
+                            <div
+                              key={idx}
+                              className={`bg-white rounded-xl p-5 border-2 transition-all duration-200 cursor-pointer ${
+                                hoveredBusinessId === businessId
+                                  ? "border-blue-500 bg-blue-50 shadow-lg scale-[1.02]"
+                                  : "border-slate-200 hover:border-slate-300 hover:shadow-md"
+                              }`}
+                              onMouseEnter={() =>
+                                setHoveredBusinessId(businessId)
+                              }
+                              onMouseLeave={() => setHoveredBusinessId(null)}
+                            >
+                              <div className="flex items-start justify-between mb-3">
+                                <h4 className="text-base font-bold text-slate-900 leading-tight">
+                                  {business.name}
+                                </h4>
+                                {business.rating && (
+                                  <div className="flex items-center gap-1 ml-3 bg-yellow-50 px-2 py-1 rounded-lg border border-yellow-200">
+                                    <svg
+                                      className="w-4 h-4 text-yellow-500"
+                                      fill="currentColor"
+                                      viewBox="0 0 20 20"
+                                    >
+                                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                    </svg>
+                                    <span className="text-xs font-bold text-slate-900">
+                                      {business.rating.toFixed(1)}
+                                    </span>
+                                    {business.userRatingsTotal && (
+                                      <span className="text-xs text-slate-500">
+                                        (
+                                        {business.userRatingsTotal.toLocaleString()}
+                                        )
+                                      </span>
+                                    )}
+                                  </div>
                                 )}
                               </div>
-                            )}
-                          </div>
 
-                          {business.vicinity && (
-                            <div className="flex items-start gap-2 mb-2 text-xs text-slate-600">
-                              <svg
-                                className="w-4 h-4 text-blue-600 mt-0.5 shrink-0"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                                />
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                                />
-                              </svg>
-                              <span>{business.vicinity}</span>
-                            </div>
-                          )}
-
-                          {latitude &&
-                            longitude &&
-                            business.geometry?.location && (
-                              <div className="flex items-center gap-2 mb-3 text-xs text-slate-600">
-                                <svg
-                                  className="w-4 h-4 text-blue-600"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-                                  />
-                                </svg>
-                                <span className="font-medium">
-                                  {calculateDistance(
-                                    latitude,
-                                    longitude,
-                                    business.geometry.location.lat,
-                                    business.geometry.location.lng
-                                  ).toFixed(2)}{" "}
-                                  miles away
-                                </span>
-                              </div>
-                            )}
-
-                          {business.types && business.types.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mb-3">
-                              {business.types
-                                .filter(
-                                  (type: string) =>
-                                    ![
-                                      "establishment",
-                                      "point_of_interest",
-                                      "geocode",
-                                    ].includes(type)
-                                )
-                                .slice(0, 3)
-                                .map((type: string, typeIdx: number) => (
-                                  <span
-                                    key={typeIdx}
-                                    className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium border border-blue-200 capitalize"
+                              {business.vicinity && (
+                                <div className="flex items-start gap-2 mb-2 text-xs text-slate-600">
+                                  <svg
+                                    className="w-4 h-4 text-blue-600 mt-0.5 shrink-0"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
                                   >
-                                    {type.replace(/_/g, " ")}
-                                  </span>
-                                ))}
-                            </div>
-                          )}
-
-                          <div className="flex items-center gap-3 flex-wrap">
-                            {business.priceLevel !== null &&
-                              business.priceLevel !== undefined && (
-                                <div className="flex items-center gap-1 text-xs text-slate-600">
-                                  <span className="font-medium">Price:</span>
-                                  <span className="text-green-600 font-bold">
-                                    {"$".repeat(business.priceLevel + 1)}
-                                  </span>
-                                  {business.priceLevel === 0 && (
-                                    <span className="text-slate-500">
-                                      (Free)
-                                    </span>
-                                  )}
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                    />
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                    />
+                                  </svg>
+                                  <span>{business.vicinity}</span>
                                 </div>
                               )}
 
-                            {business.businessStatus && (
-                              <span
-                                className={`px-2 py-1 rounded-lg text-xs font-medium ${
-                                  business.businessStatus === "OPERATIONAL"
-                                    ? "bg-green-50 text-green-700 border border-green-200"
-                                    : business.businessStatus ===
-                                      "CLOSED_TEMPORARILY"
-                                    ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
-                                    : "bg-red-50 text-red-700 border border-red-200"
-                                }`}
-                              >
-                                {business.businessStatus === "OPERATIONAL"
-                                  ? "✓ Open"
-                                  : business.businessStatus ===
-                                    "CLOSED_TEMPORARILY"
-                                  ? "⚠ Temporarily Closed"
-                                  : "✗ Closed"}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
+                              {latitude &&
+                                longitude &&
+                                business.geometry?.location && (
+                                  <div className="flex items-center gap-2 mb-3 text-xs text-slate-600">
+                                    <svg
+                                      className="w-4 h-4 text-blue-600"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+                                      />
+                                    </svg>
+                                    <span className="font-medium">
+                                      {calculateDistance(
+                                        latitude,
+                                        longitude,
+                                        business.geometry.location.lat,
+                                        business.geometry.location.lng
+                                      ).toFixed(2)}{" "}
+                                      miles away
+                                    </span>
+                                  </div>
+                                )}
 
-            {/* Events */}
-            {loadingEvents ? (
-              <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-slate-200">
-                <div className="flex items-center justify-center gap-3">
-                  <svg
-                    className="animate-spin h-6 w-6 text-blue-600"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  <span className="text-slate-600">Loading events...</span>
-                </div>
-              </div>
-            ) : events.length > 0 ? (
-              <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-slate-200">
-                <div className="p-6 border-b border-slate-200">
-                  <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                    <svg
-                      className="w-5 h-5 text-purple-600"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                      />
-                    </svg>
-                    Local Events
-                    <span className="px-2.5 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">
-                      {events.length}
-                    </span>
-                  </h3>
-                </div>
-                <div className="p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto pr-2">
-                    {events.map((event) => (
-                      <div
-                        key={event.id}
-                        className="bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 rounded-xl p-5 border border-purple-200/50 hover:border-purple-300 hover:shadow-md transition-all duration-200"
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <h4 className="text-base font-bold text-slate-900 flex-1 leading-tight">
-                            {event.name}
-                          </h4>
-                          {event.logo && (
-                            <img
-                              src={event.logo}
-                              alt={event.name}
-                              className="w-14 h-14 rounded-lg object-cover ml-3 border-2 border-white shadow-sm"
-                            />
-                          )}
-                        </div>
+                              {business.types && business.types.length > 0 && (
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                  {business.types
+                                    .filter(
+                                      (type: string) =>
+                                        ![
+                                          "establishment",
+                                          "point_of_interest",
+                                          "geocode",
+                                        ].includes(type)
+                                    )
+                                    .slice(0, 3)
+                                    .map((type: string, typeIdx: number) => (
+                                      <span
+                                        key={typeIdx}
+                                        className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium border border-blue-200 capitalize"
+                                      >
+                                        {type.replace(/_/g, " ")}
+                                      </span>
+                                    ))}
+                                </div>
+                              )}
 
-                        {event.start && (
-                          <div className="flex items-center gap-2 mb-2 text-xs text-slate-700">
-                            <svg
-                              className="w-4 h-4 text-purple-600"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                              />
-                            </svg>
-                            <span className="font-medium">
-                              {formatDate(event.start)}
-                              {event.end && ` - ${formatDate(event.end)}`}
-                            </span>
-                          </div>
-                        )}
+                              <div className="flex items-center gap-3 flex-wrap">
+                                {business.priceLevel !== null &&
+                                  business.priceLevel !== undefined && (
+                                    <div className="flex items-center gap-1 text-xs text-slate-600">
+                                      <span className="font-medium">
+                                        Price:
+                                      </span>
+                                      <span className="text-green-600 font-bold">
+                                        {"$".repeat(business.priceLevel + 1)}
+                                      </span>
+                                      {business.priceLevel === 0 && (
+                                        <span className="text-slate-500">
+                                          (Free)
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
 
-                        {event.venue && (
-                          <div className="flex items-start gap-2 mb-2 text-xs text-slate-600">
-                            <svg
-                              className="w-4 h-4 text-purple-600 mt-0.5 shrink-0"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                              />
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                              />
-                            </svg>
-                            <span>
-                              <span className="font-medium">
-                                {event.venue.name}
-                              </span>
-                              {event.venue.address &&
-                                ` - ${event.venue.address}`}
-                            </span>
-                          </div>
-                        )}
-
-                        {latitude && longitude && event.venue && (
-                          <div className="flex items-center gap-2 mb-3 text-xs text-slate-600">
-                            <svg
-                              className="w-4 h-4 text-purple-600"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-                              />
-                            </svg>
-                            <span className="font-medium">
-                              {calculateDistance(
-                                latitude,
-                                longitude,
-                                event.venue.latitude,
-                                event.venue.longitude
-                              ).toFixed(2)}{" "}
-                              miles away
-                            </span>
-                          </div>
-                        )}
-
-                        {event.description && (
-                          <p className="text-xs text-slate-600 mb-3 line-clamp-2 leading-relaxed">
-                            {event.description}
-                          </p>
-                        )}
-
-                        <div className="flex items-center gap-2 flex-wrap mb-3">
-                          {event.is_free !== null && (
-                            <span
-                              className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                event.is_free
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-yellow-100 text-yellow-700"
-                              }`}
-                            >
-                              {event.is_free ? "🆓 Free" : "💰 Paid"}
-                            </span>
-                          )}
-
-                          {event.online_event && (
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                              🌐 Online
-                            </span>
-                          )}
-
-                          {event.rating && (
-                            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">
-                              ⭐ {event.rating.toFixed(1)}
-                            </span>
-                          )}
-                        </div>
-
-                        {event.url && (
-                          <a
-                            href={event.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-purple-700 hover:text-purple-800 font-medium inline-flex items-center gap-1 group"
-                          >
-                            <span>Learn More</span>
-                            <svg
-                              className="w-3 h-3 group-hover:translate-x-0.5 transition-transform"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M9 5l7 7-7 7"
-                              />
-                            </svg>
-                          </a>
-                        )}
+                                {business.businessStatus && (
+                                  <span
+                                    className={`px-2 py-1 rounded-lg text-xs font-medium ${
+                                      business.businessStatus === "OPERATIONAL"
+                                        ? "bg-green-50 text-green-700 border border-green-200"
+                                        : business.businessStatus ===
+                                          "CLOSED_TEMPORARILY"
+                                        ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                                        : "bg-red-50 text-red-700 border border-red-200"
+                                    }`}
+                                  >
+                                    {business.businessStatus === "OPERATIONAL"
+                                      ? "✓ Open"
+                                      : business.businessStatus ===
+                                        "CLOSED_TEMPORARILY"
+                                      ? "⚠ Temporarily Closed"
+                                      : "✗ Closed"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ) : null}
+              )}
+
+              {/* Events Tab Content */}
+              {activeTab === "events" && (
+                <div className="p-6">
+                  {loadingEvents ? (
+                    <div className="p-12 text-center">
+                      <div className="flex items-center justify-center gap-3">
+                        <svg
+                          className="animate-spin h-6 w-6 text-blue-600"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          ></circle>
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          ></path>
+                        </svg>
+                        <span className="text-slate-600">
+                          Loading events...
+                        </span>
+                      </div>
+                    </div>
+                  ) : events.length > 0 ? (
+                    <>
+                      <div className="mb-6">
+                        <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2 mb-2">
+                          <svg
+                            className="w-5 h-5 text-purple-600"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                            />
+                          </svg>
+                          Local Events
+                          <span className="px-2.5 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">
+                            {events.length}
+                          </span>
+                        </h3>
+                      </div>
+                      <div className="mb-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto pr-2">
+                          {events.map((event) => (
+                            <div
+                              key={event.id}
+                              className="bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 rounded-xl p-5 border border-purple-200/50 hover:border-purple-300 hover:shadow-md transition-all duration-200"
+                            >
+                              <div className="flex items-start justify-between mb-3">
+                                <h4 className="text-base font-bold text-slate-900 flex-1 leading-tight">
+                                  {event.name}
+                                </h4>
+                                {event.logo && (
+                                  <img
+                                    src={event.logo}
+                                    alt={event.name}
+                                    className="w-14 h-14 rounded-lg object-cover ml-3 border-2 border-white shadow-sm"
+                                  />
+                                )}
+                              </div>
+
+                              {event.start && (
+                                <div className="flex items-center gap-2 mb-2 text-xs text-slate-700">
+                                  <svg
+                                    className="w-4 h-4 text-purple-600"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                    />
+                                  </svg>
+                                  <span className="font-medium">
+                                    {formatDate(event.start)}
+                                    {event.end && ` - ${formatDate(event.end)}`}
+                                  </span>
+                                </div>
+                              )}
+
+                              {event.venue && (
+                                <div className="flex items-start gap-2 mb-2 text-xs text-slate-600">
+                                  <svg
+                                    className="w-4 h-4 text-purple-600 mt-0.5 shrink-0"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                    />
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                    />
+                                  </svg>
+                                  <span>
+                                    <span className="font-medium">
+                                      {event.venue.name}
+                                    </span>
+                                    {event.venue.address &&
+                                      ` - ${event.venue.address}`}
+                                  </span>
+                                </div>
+                              )}
+
+                              {latitude && longitude && event.venue && (
+                                <div className="flex items-center gap-2 mb-3 text-xs text-slate-600">
+                                  <svg
+                                    className="w-4 h-4 text-purple-600"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+                                    />
+                                  </svg>
+                                  <span className="font-medium">
+                                    {calculateDistance(
+                                      latitude,
+                                      longitude,
+                                      event.venue.latitude,
+                                      event.venue.longitude
+                                    ).toFixed(2)}{" "}
+                                    miles away
+                                  </span>
+                                </div>
+                              )}
+
+                              {event.description && (
+                                <p className="text-xs text-slate-600 mb-3 line-clamp-2 leading-relaxed">
+                                  {event.description}
+                                </p>
+                              )}
+
+                              {/* Venue Contact Information */}
+                              {event.venueContact && (
+                                <div className="mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <svg
+                                      className="w-4 h-4 text-blue-600"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                                      />
+                                    </svg>
+                                    <span className="text-xs font-semibold text-blue-900">
+                                      Venue Contact
+                                    </span>
+                                  </div>
+                                  <div className="space-y-1.5 text-xs text-slate-700">
+                                    {event.venueContact.phone && (
+                                      <div className="flex items-center gap-2">
+                                        <svg
+                                          className="w-3.5 h-3.5 text-blue-600 shrink-0"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                                          />
+                                        </svg>
+                                        <a
+                                          href={`tel:${event.venueContact.phone.replace(
+                                            /\s/g,
+                                            ""
+                                          )}`}
+                                          className="text-blue-700 hover:text-blue-800 hover:underline"
+                                        >
+                                          {event.venueContact.phone}
+                                        </a>
+                                      </div>
+                                    )}
+                                    {event.venueContact.website && (
+                                      <div className="flex items-center gap-2">
+                                        <svg
+                                          className="w-3.5 h-3.5 text-blue-600 shrink-0"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
+                                          />
+                                        </svg>
+                                        <a
+                                          href={event.venueContact.website}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-blue-700 hover:text-blue-800 hover:underline truncate"
+                                        >
+                                          {event.venueContact.website.replace(
+                                            /^https?:\/\//,
+                                            ""
+                                          )}
+                                        </a>
+                                      </div>
+                                    )}
+                                    {event.venueContact.openingHours && (
+                                      <div className="flex items-start gap-2 pt-1 border-t border-blue-200">
+                                        <svg
+                                          className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          viewBox="0 0 24 24"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                          />
+                                        </svg>
+                                        <div className="text-xs">
+                                          {event.venueContact.openingHours
+                                            .slice(0, 3)
+                                            .map(
+                                              (hours: string, idx: number) => (
+                                                <div key={idx}>{hours}</div>
+                                              )
+                                            )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="flex items-center gap-2 flex-wrap mb-3">
+                                {event.is_free !== null && (
+                                  <span
+                                    className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                      event.is_free
+                                        ? "bg-green-100 text-green-700"
+                                        : "bg-yellow-100 text-yellow-700"
+                                    }`}
+                                  >
+                                    {event.is_free ? "🆓 Free" : "💰 Paid"}
+                                  </span>
+                                )}
+
+                                {event.online_event && (
+                                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                    🌐 Online
+                                  </span>
+                                )}
+
+                                {event.rating && (
+                                  <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs font-medium">
+                                    ⭐ {event.rating.toFixed(1)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Events Map */}
+                      <div className="mt-6">
+                        <h4 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                          <svg
+                            className="w-5 h-5 text-purple-600"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+                            />
+                          </svg>
+                          Events Map
+                        </h4>
+                        <EventsMap
+                          propertyLatitude={latitude}
+                          propertyLongitude={longitude}
+                          events={events}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="p-12 text-center text-slate-500">
+                      <p>No events found for this location.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

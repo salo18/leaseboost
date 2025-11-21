@@ -40,6 +40,26 @@ interface Business {
   geometry: any | null;
 }
 
+interface Event {
+  id: string;
+  name: string;
+  description: string;
+  start: string | null;
+  end: string | null;
+  url: string | null;
+  venue: {
+    name: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+  } | null;
+  online_event: boolean;
+  is_free: boolean | null;
+  has_available_tickets: boolean | null;
+  logo: string | null;
+  rating?: number | null;
+}
+
 interface PropertyMapProps {
   propertyName: string;
   propertyAddress: string;
