@@ -26,6 +26,14 @@ function calculateDistance(
   return R * c;
 }
 
+interface BusinessContact {
+  phone: string | null;
+  website: string | null;
+  address: string | null;
+  openingHours: string[] | null;
+  googlePlaceId: string | null;
+}
+
 interface Business {
   name: string;
   types: string[];
@@ -36,6 +44,7 @@ interface Business {
   priceLevel: number | null;
   businessStatus: string | null;
   geometry: any | null;
+  enrichedContact?: BusinessContact | null;
 }
 
 interface VenueContact {
@@ -141,7 +150,37 @@ export default function Home() {
 
       if (businessesResponse.ok) {
         const businessesData = await businessesResponse.json();
-        setNearbyBusinesses(businessesData.results || []);
+        const fetchedBusinesses = businessesData.results || [];
+
+        // Step 2.5: Enrich businesses with contact information
+        if (fetchedBusinesses.length > 0) {
+          try {
+            const enrichResponse = await fetch("/api/businesses/enrich", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ businesses: fetchedBusinesses }),
+            });
+
+            if (enrichResponse.ok) {
+              const enrichedData = await enrichResponse.json();
+              setNearbyBusinesses(enrichedData.businesses || fetchedBusinesses);
+              console.log(
+                `✅ Enriched ${enrichedData.enriched}/${enrichedData.total} businesses with contact info`
+              );
+            } else {
+              // If enrichment fails, still use the businesses without contact info
+              setNearbyBusinesses(fetchedBusinesses);
+            }
+          } catch (error) {
+            console.error("Error enriching businesses:", error);
+            // If enrichment fails, still use the businesses without contact info
+            setNearbyBusinesses(fetchedBusinesses);
+          }
+        } else {
+          setNearbyBusinesses([]);
+        }
       }
 
       // Step 3: Auto-fetch events
@@ -483,6 +522,9 @@ export default function Home() {
                                     </div>
                                   </th>
                                   <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                    Contact
+                                  </th>
+                                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
                                     Action
                                   </th>
                                 </tr>
@@ -614,6 +656,153 @@ export default function Home() {
                                               —
                                             </span>
                                           )}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                          <div className="flex flex-col gap-2">
+                                            {business.enrichedContact ? (
+                                              <>
+                                                <span className="inline-flex items-center px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
+                                                  ✓ Enriched
+                                                </span>
+                                                <div className="flex flex-col gap-1.5 pl-1 border-l-2 border-green-200">
+                                                  {business.enrichedContact
+                                                    .phone && (
+                                                    <div className="flex items-center gap-1.5">
+                                                      <svg
+                                                        className="w-4 h-4 text-green-600 shrink-0"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                      >
+                                                        <path
+                                                          strokeLinecap="round"
+                                                          strokeLinejoin="round"
+                                                          strokeWidth={2}
+                                                          d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                                                        />
+                                                      </svg>
+                                                      <a
+                                                        href={`tel:${business.enrichedContact.phone.replace(
+                                                          /\s/g,
+                                                          ""
+                                                        )}`}
+                                                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                                      >
+                                                        {
+                                                          business
+                                                            .enrichedContact
+                                                            .phone
+                                                        }
+                                                      </a>
+                                                    </div>
+                                                  )}
+                                                  {business.enrichedContact
+                                                    .website && (
+                                                    <div className="flex items-center gap-1.5">
+                                                      <svg
+                                                        className="w-4 h-4 text-green-600 shrink-0"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                      >
+                                                        <path
+                                                          strokeLinecap="round"
+                                                          strokeLinejoin="round"
+                                                          strokeWidth={2}
+                                                          d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
+                                                        />
+                                                      </svg>
+                                                      <a
+                                                        href={
+                                                          business
+                                                            .enrichedContact
+                                                            .website
+                                                        }
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-blue-600 hover:text-blue-800 text-sm font-medium truncate max-w-[200px]"
+                                                      >
+                                                        {business.enrichedContact.website.replace(
+                                                          /^https?:\/\//,
+                                                          ""
+                                                        )}
+                                                      </a>
+                                                    </div>
+                                                  )}
+                                                  {business.enrichedContact
+                                                    .address && (
+                                                    <div className="flex items-start gap-1.5">
+                                                      <svg
+                                                        className="w-4 h-4 text-green-600 mt-0.5 shrink-0"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                      >
+                                                        <path
+                                                          strokeLinecap="round"
+                                                          strokeLinejoin="round"
+                                                          strokeWidth={2}
+                                                          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                                        />
+                                                        <path
+                                                          strokeLinecap="round"
+                                                          strokeLinejoin="round"
+                                                          strokeWidth={2}
+                                                          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                                        />
+                                                      </svg>
+                                                      <span className="text-xs text-slate-600">
+                                                        {
+                                                          business
+                                                            .enrichedContact
+                                                            .address
+                                                        }
+                                                      </span>
+                                                    </div>
+                                                  )}
+                                                  {business.enrichedContact
+                                                    .openingHours &&
+                                                    business.enrichedContact
+                                                      .openingHours.length >
+                                                      0 && (
+                                                      <div className="flex items-start gap-1.5 pt-1">
+                                                        <svg
+                                                          className="w-4 h-4 text-green-600 shrink-0 mt-0.5"
+                                                          fill="none"
+                                                          stroke="currentColor"
+                                                          viewBox="0 0 24 24"
+                                                        >
+                                                          <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                                          />
+                                                        </svg>
+                                                        <div className="text-xs text-slate-600">
+                                                          {business.enrichedContact.openingHours
+                                                            .slice(0, 2)
+                                                            .map(
+                                                              (
+                                                                hours: string,
+                                                                idx: number
+                                                              ) => (
+                                                                <div key={idx}>
+                                                                  {hours}
+                                                                </div>
+                                                              )
+                                                            )}
+                                                        </div>
+                                                      </div>
+                                                    )}
+                                                </div>
+                                              </>
+                                            ) : (
+                                              <span className="text-slate-400 text-sm">
+                                                No contact info
+                                              </span>
+                                            )}
+                                          </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                           <div className="flex items-center gap-1">
