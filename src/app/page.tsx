@@ -87,6 +87,7 @@ export default function Home() {
   const [hoveredBusinessId, setHoveredBusinessId] = useState<string | null>(
     null
   );
+  const [hoveredEventId, setHoveredEventId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [activeTab, setActiveTab] = useState<"location" | "events">("location");
@@ -237,14 +238,14 @@ export default function Home() {
     if (!dateString) return "Date TBD";
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString("en-US", {
-        weekday: "short",
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      });
+      const month = date.toLocaleDateString("en-US", { month: "short" });
+      const day = date.getDate();
+      const hour = date.getHours();
+      const minute = date.getMinutes();
+      const ampm = hour >= 12 ? "PM" : "AM";
+      const displayHour = hour % 12 || 12;
+      const displayMinute = minute.toString().padStart(2, "0");
+      return `${month} ${day}, ${displayHour}:${displayMinute} ${ampm}`;
     } catch {
       return dateString;
     }
@@ -479,6 +480,7 @@ export default function Home() {
                             longitude={longitude}
                             nearbyBusinesses={nearbyBusinesses}
                             hoveredBusinessId={hoveredBusinessId}
+                            onBusinessHover={setHoveredBusinessId}
                             apiKey={mapsApiKey}
                           />
                         </div>
@@ -487,392 +489,333 @@ export default function Home() {
                       {/* Businesses Table */}
                       {nearbyBusinesses.length > 0 && (
                         <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-                          <div className="overflow-x-auto">
-                            <table className="w-full">
-                              <thead className="bg-slate-50 border-b border-slate-200">
-                                <tr>
-                                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                    Name
-                                  </th>
-                                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                    Distance
-                                  </th>
-                                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                    Type
-                                  </th>
-                                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                    Rating
-                                  </th>
-                                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                    <div className="flex items-center gap-1">
-                                      Status
-                                      <svg
-                                        className="w-3 h-3 text-slate-500"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                      >
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={2}
-                                          d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
-                                        />
-                                      </svg>
-                                    </div>
-                                  </th>
-                                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                    Contact
-                                  </th>
-                                  <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                    Action
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody className="bg-white divide-y divide-slate-200">
-                                {nearbyBusinesses
-                                  .filter((business) => {
-                                    if (businessFilter === "All") return true;
-                                    if (businessFilter === "Open")
-                                      return (
-                                        business.businessStatus ===
-                                        "OPERATIONAL"
-                                      );
-                                    if (businessFilter === "Closed")
-                                      return (
-                                        business.businessStatus !==
-                                        "OPERATIONAL"
-                                      );
-                                    return true;
-                                  })
-                                  .map((business, idx) => {
-                                    const businessId =
-                                      business.placeId || `business-${idx}`;
-                                    const distance =
-                                      latitude &&
-                                      longitude &&
-                                      business.geometry?.location
-                                        ? calculateDistance(
-                                            latitude,
-                                            longitude,
-                                            business.geometry.location.lat,
-                                            business.geometry.location.lng
-                                          ).toFixed(2) + " mi"
-                                        : "N/A";
-                                    const businessType =
-                                      business.types
-                                        ?.filter(
-                                          (type: string) =>
-                                            ![
-                                              "establishment",
-                                              "point_of_interest",
-                                              "geocode",
-                                            ].includes(type)
-                                        )[0]
-                                        ?.replace(/_/g, " ")
-                                        .split(" ")
-                                        .map(
-                                          (word: string) =>
-                                            word.charAt(0).toUpperCase() +
-                                            word.slice(1)
-                                        )
-                                        .join(" ") || "Business";
-
+                          <table className="w-full table-fixed">
+                            <colgroup>
+                              <col className="w-[20%]" />
+                              <col className="w-[8%]" />
+                              <col className="w-[12%]" />
+                              <col className="w-[10%]" />
+                              <col className="w-[10%]" />
+                              <col className="w-[25%]" />
+                              <col className="w-[15%]" />
+                            </colgroup>
+                            <thead className="bg-slate-50 border-b border-slate-200">
+                              <tr>
+                                <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                  Name
+                                </th>
+                                <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                  Distance
+                                </th>
+                                <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                  Type
+                                </th>
+                                <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                  Rating
+                                </th>
+                                <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                  Status
+                                </th>
+                                <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                  Contact
+                                </th>
+                                <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                  Action
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-slate-200">
+                              {nearbyBusinesses
+                                .filter((business) => {
+                                  if (businessFilter === "All") return true;
+                                  if (businessFilter === "Open")
                                     return (
-                                      <tr
-                                        key={idx}
-                                        className="hover:bg-slate-50 transition-colors"
-                                        onMouseEnter={() =>
-                                          setHoveredBusinessId(businessId)
-                                        }
-                                        onMouseLeave={() =>
-                                          setHoveredBusinessId(null)
-                                        }
-                                      >
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                          <a
-                                            href="#"
-                                            className="text-blue-600 hover:text-blue-800 font-medium"
-                                          >
-                                            {business.name}
-                                          </a>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-slate-700">
-                                          {distance}
-                                        </td>
-                                        <td className="px-6 py-4 text-slate-700">
+                                      business.businessStatus === "OPERATIONAL"
+                                    );
+                                  if (businessFilter === "Closed")
+                                    return (
+                                      business.businessStatus !== "OPERATIONAL"
+                                    );
+                                  return true;
+                                })
+                                .map((business, idx) => {
+                                  const businessId =
+                                    business.placeId || `business-${idx}`;
+                                  const distance =
+                                    latitude &&
+                                    longitude &&
+                                    business.geometry?.location
+                                      ? calculateDistance(
+                                          latitude,
+                                          longitude,
+                                          business.geometry.location.lat,
+                                          business.geometry.location.lng
+                                        ).toFixed(2) + " mi"
+                                      : "N/A";
+                                  const businessType =
+                                    business.types
+                                      ?.filter(
+                                        (type: string) =>
+                                          ![
+                                            "establishment",
+                                            "point_of_interest",
+                                            "geocode",
+                                          ].includes(type)
+                                      )[0]
+                                      ?.replace(/_/g, " ")
+                                      .split(" ")
+                                      .map(
+                                        (word: string) =>
+                                          word.charAt(0).toUpperCase() +
+                                          word.slice(1)
+                                      )
+                                      .join(" ") || "Business";
+
+                                  return (
+                                    <tr
+                                      key={idx}
+                                      className={`transition-colors ${
+                                        hoveredBusinessId === businessId
+                                          ? "bg-blue-50 border-l-4 border-blue-500"
+                                          : "hover:bg-slate-50"
+                                      }`}
+                                      onMouseEnter={() =>
+                                        setHoveredBusinessId(businessId)
+                                      }
+                                      onMouseLeave={() =>
+                                        setHoveredBusinessId(null)
+                                      }
+                                    >
+                                      <td className="px-3 py-2.5">
+                                        <a
+                                          href="#"
+                                          className="text-blue-600 hover:text-blue-800 font-medium text-sm truncate block"
+                                          title={business.name}
+                                        >
+                                          {business.name}
+                                        </a>
+                                      </td>
+                                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-700 text-sm">
+                                        {distance}
+                                      </td>
+                                      <td className="px-3 py-2.5 text-slate-700 text-sm">
+                                        <span
+                                          className="truncate block"
+                                          title={businessType}
+                                        >
                                           {businessType}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                          {business.rating ? (
-                                            <div className="flex items-center gap-1">
-                                              <svg
-                                                className="w-4 h-4 text-yellow-500"
-                                                fill="currentColor"
-                                                viewBox="0 0 20 20"
-                                              >
-                                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                              </svg>
-                                              <span className="text-sm font-medium text-slate-900">
-                                                {business.rating.toFixed(1)}
-                                              </span>
-                                              {business.userRatingsTotal && (
-                                                <span className="text-xs text-slate-500">
-                                                  (
-                                                  {business.userRatingsTotal.toLocaleString()}
-                                                  )
-                                                </span>
-                                              )}
-                                            </div>
-                                          ) : (
-                                            <span className="text-slate-400 text-sm">
-                                              —
-                                            </span>
-                                          )}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                          {business.businessStatus ? (
-                                            <span
-                                              className={`px-2 py-1 rounded-lg text-xs font-medium ${
-                                                business.businessStatus ===
-                                                "OPERATIONAL"
-                                                  ? "bg-green-50 text-green-700 border border-green-200"
-                                                  : business.businessStatus ===
-                                                    "CLOSED_TEMPORARILY"
-                                                  ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
-                                                  : "bg-red-50 text-red-700 border border-red-200"
-                                              }`}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-2.5 whitespace-nowrap">
+                                        {business.rating ? (
+                                          <div className="flex items-center gap-1">
+                                            <svg
+                                              className="w-4 h-4 text-yellow-500"
+                                              fill="currentColor"
+                                              viewBox="0 0 20 20"
                                             >
-                                              {business.businessStatus ===
-                                              "OPERATIONAL"
-                                                ? "✓ Open"
-                                                : business.businessStatus ===
-                                                  "CLOSED_TEMPORARILY"
-                                                ? "⚠ Temporarily Closed"
-                                                : "✗ Closed"}
+                                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                            </svg>
+                                            <span className="text-xs font-medium text-slate-900">
+                                              {business.rating.toFixed(1)}
                                             </span>
-                                          ) : (
-                                            <span className="text-slate-400 text-sm">
-                                              —
-                                            </span>
-                                          )}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                          <div className="flex flex-col gap-2">
-                                            {business.enrichedContact ? (
-                                              <>
-                                                <span className="inline-flex items-center px-1.5 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">
-                                                  ✓ Enriched
-                                                </span>
-                                                <div className="flex flex-col gap-1.5 pl-1 border-l-2 border-green-200">
-                                                  {business.enrichedContact
-                                                    .phone && (
-                                                    <div className="flex items-center gap-1.5">
-                                                      <svg
-                                                        className="w-4 h-4 text-green-600 shrink-0"
-                                                        fill="none"
-                                                        stroke="currentColor"
-                                                        viewBox="0 0 24 24"
-                                                      >
-                                                        <path
-                                                          strokeLinecap="round"
-                                                          strokeLinejoin="round"
-                                                          strokeWidth={2}
-                                                          d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                                                        />
-                                                      </svg>
-                                                      <a
-                                                        href={`tel:${business.enrichedContact.phone.replace(
-                                                          /\s/g,
-                                                          ""
-                                                        )}`}
-                                                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                                                      >
-                                                        {
-                                                          business
-                                                            .enrichedContact
-                                                            .phone
-                                                        }
-                                                      </a>
-                                                    </div>
-                                                  )}
-                                                  {business.enrichedContact
-                                                    .website && (
-                                                    <div className="flex items-center gap-1.5">
-                                                      <svg
-                                                        className="w-4 h-4 text-green-600 shrink-0"
-                                                        fill="none"
-                                                        stroke="currentColor"
-                                                        viewBox="0 0 24 24"
-                                                      >
-                                                        <path
-                                                          strokeLinecap="round"
-                                                          strokeLinejoin="round"
-                                                          strokeWidth={2}
-                                                          d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
-                                                        />
-                                                      </svg>
-                                                      <a
-                                                        href={
-                                                          business
-                                                            .enrichedContact
-                                                            .website
-                                                        }
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-blue-600 hover:text-blue-800 text-sm font-medium truncate max-w-[200px]"
-                                                      >
-                                                        {business.enrichedContact.website.replace(
-                                                          /^https?:\/\//,
-                                                          ""
-                                                        )}
-                                                      </a>
-                                                    </div>
-                                                  )}
-                                                  {business.enrichedContact
-                                                    .address && (
-                                                    <div className="flex items-start gap-1.5">
-                                                      <svg
-                                                        className="w-4 h-4 text-green-600 mt-0.5 shrink-0"
-                                                        fill="none"
-                                                        stroke="currentColor"
-                                                        viewBox="0 0 24 24"
-                                                      >
-                                                        <path
-                                                          strokeLinecap="round"
-                                                          strokeLinejoin="round"
-                                                          strokeWidth={2}
-                                                          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                                                        />
-                                                        <path
-                                                          strokeLinecap="round"
-                                                          strokeLinejoin="round"
-                                                          strokeWidth={2}
-                                                          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                                                        />
-                                                      </svg>
-                                                      <span className="text-xs text-slate-600">
-                                                        {
-                                                          business
-                                                            .enrichedContact
-                                                            .address
-                                                        }
-                                                      </span>
-                                                    </div>
-                                                  )}
-                                                  {business.enrichedContact
-                                                    .openingHours &&
-                                                    business.enrichedContact
-                                                      .openingHours.length >
-                                                      0 && (
-                                                      <div className="flex items-start gap-1.5 pt-1">
-                                                        <svg
-                                                          className="w-4 h-4 text-green-600 shrink-0 mt-0.5"
-                                                          fill="none"
-                                                          stroke="currentColor"
-                                                          viewBox="0 0 24 24"
-                                                        >
-                                                          <path
-                                                            strokeLinecap="round"
-                                                            strokeLinejoin="round"
-                                                            strokeWidth={2}
-                                                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                                                          />
-                                                        </svg>
-                                                        <div className="text-xs text-slate-600">
-                                                          {business.enrichedContact.openingHours
-                                                            .slice(0, 2)
-                                                            .map(
-                                                              (
-                                                                hours: string,
-                                                                idx: number
-                                                              ) => (
-                                                                <div key={idx}>
-                                                                  {hours}
-                                                                </div>
-                                                              )
-                                                            )}
-                                                        </div>
-                                                      </div>
-                                                    )}
-                                                </div>
-                                              </>
-                                            ) : (
-                                              <span className="text-slate-400 text-sm">
-                                                No contact info
+                                            {business.userRatingsTotal && (
+                                              <span className="text-xs text-slate-500">
+                                                (
+                                                {business.userRatingsTotal > 999
+                                                  ? Math.floor(
+                                                      business.userRatingsTotal /
+                                                        1000
+                                                    ) + "k"
+                                                  : business.userRatingsTotal.toLocaleString()}
+                                                )
                                               </span>
                                             )}
                                           </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                          <div className="flex items-center gap-1">
-                                            <button
-                                              className="w-8 h-8 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-100 transition-colors"
-                                              title="View Details"
-                                            >
-                                              <svg
-                                                className="w-4 h-4 text-slate-900"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                                strokeWidth={2}
-                                              >
-                                                <path
-                                                  strokeLinecap="round"
-                                                  strokeLinejoin="round"
-                                                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                                                />
-                                                <path
-                                                  strokeLinecap="round"
-                                                  strokeLinejoin="round"
-                                                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                                                />
-                                              </svg>
-                                            </button>
-                                            <button
-                                              className="w-8 h-8 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-100 transition-colors"
-                                              title="Directions"
-                                            >
-                                              <svg
-                                                className="w-4 h-4 text-slate-900"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                                strokeWidth={2}
-                                              >
-                                                <path
-                                                  strokeLinecap="round"
-                                                  strokeLinejoin="round"
-                                                  d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-                                                />
-                                              </svg>
-                                            </button>
-                                            <button
-                                              className="w-8 h-8 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-100 transition-colors"
-                                              title="Save"
-                                            >
-                                              <svg
-                                                className="w-4 h-4 text-slate-900"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                                strokeWidth={2}
-                                              >
-                                                <path
-                                                  strokeLinecap="round"
-                                                  strokeLinejoin="round"
-                                                  d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
-                                                />
-                                              </svg>
-                                            </button>
+                                        ) : (
+                                          <span className="text-slate-400 text-xs">
+                                            —
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2.5 whitespace-nowrap">
+                                        {business.businessStatus ? (
+                                          <span
+                                            className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                              business.businessStatus ===
+                                              "OPERATIONAL"
+                                                ? "bg-green-50 text-green-700 border border-green-200"
+                                                : business.businessStatus ===
+                                                  "CLOSED_TEMPORARILY"
+                                                ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                                                : "bg-red-50 text-red-700 border border-red-200"
+                                            }`}
+                                          >
+                                            {business.businessStatus ===
+                                            "OPERATIONAL"
+                                              ? "✓ Open"
+                                              : business.businessStatus ===
+                                                "CLOSED_TEMPORARILY"
+                                              ? "⚠ Temporarily Closed"
+                                              : "✗ Closed"}
+                                          </span>
+                                        ) : (
+                                          <span className="text-slate-400 text-sm">
+                                            —
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2.5">
+                                        {business.enrichedContact ? (
+                                          <div className="flex flex-col gap-1 pl-0.5 border-l-2 border-green-200">
+                                            {business.enrichedContact.phone && (
+                                              <div className="flex items-center gap-1">
+                                                <svg
+                                                  className="w-3 h-3 text-green-600 shrink-0"
+                                                  fill="none"
+                                                  stroke="currentColor"
+                                                  viewBox="0 0 24 24"
+                                                >
+                                                  <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                                                  />
+                                                </svg>
+                                                <a
+                                                  href={`tel:${business.enrichedContact.phone.replace(
+                                                    /\s/g,
+                                                    ""
+                                                  )}`}
+                                                  className="text-blue-600 hover:text-blue-800 text-xs font-medium truncate"
+                                                  title={
+                                                    business.enrichedContact
+                                                      .phone
+                                                  }
+                                                >
+                                                  {
+                                                    business.enrichedContact
+                                                      .phone
+                                                  }
+                                                </a>
+                                              </div>
+                                            )}
+                                            {business.enrichedContact
+                                              .website && (
+                                              <div className="flex items-center gap-1">
+                                                <svg
+                                                  className="w-3 h-3 text-green-600 shrink-0"
+                                                  fill="none"
+                                                  stroke="currentColor"
+                                                  viewBox="0 0 24 24"
+                                                >
+                                                  <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
+                                                  />
+                                                </svg>
+                                                <a
+                                                  href={
+                                                    business.enrichedContact
+                                                      .website
+                                                  }
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="text-blue-600 hover:text-blue-800 text-xs font-medium truncate"
+                                                  title={business.enrichedContact.website.replace(
+                                                    /^https?:\/\//,
+                                                    ""
+                                                  )}
+                                                >
+                                                  {
+                                                    business.enrichedContact.website
+                                                      .replace(
+                                                        /^https?:\/\//,
+                                                        ""
+                                                      )
+                                                      .split("/")[0]
+                                                  }
+                                                </a>
+                                              </div>
+                                            )}
                                           </div>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                              </tbody>
-                            </table>
-                          </div>
+                                        ) : (
+                                          <span className="text-slate-400 text-xs">
+                                            —
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2.5 whitespace-nowrap">
+                                        <div className="flex items-center gap-0.5">
+                                          <button
+                                            className="w-7 h-7 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-100 transition-colors"
+                                            title="View Details"
+                                          >
+                                            <svg
+                                              className="w-3.5 h-3.5 text-slate-900"
+                                              fill="none"
+                                              stroke="currentColor"
+                                              viewBox="0 0 24 24"
+                                              strokeWidth={2}
+                                            >
+                                              <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                              />
+                                              <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                              />
+                                            </svg>
+                                          </button>
+                                          <button
+                                            className="w-7 h-7 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-100 transition-colors"
+                                            title="Directions"
+                                          >
+                                            <svg
+                                              className="w-3.5 h-3.5 text-slate-900"
+                                              fill="none"
+                                              stroke="currentColor"
+                                              viewBox="0 0 24 24"
+                                              strokeWidth={2}
+                                            >
+                                              <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+                                              />
+                                            </svg>
+                                          </button>
+                                          <button
+                                            className="w-7 h-7 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-100 transition-colors"
+                                            title="Save"
+                                          >
+                                            <svg
+                                              className="w-3.5 h-3.5 text-slate-900"
+                                              fill="none"
+                                              stroke="currentColor"
+                                              viewBox="0 0 24 24"
+                                              strokeWidth={2}
+                                            >
+                                              <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+                                              />
+                                            </svg>
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                            </tbody>
+                          </table>
                         </div>
                       )}
 
@@ -993,6 +936,8 @@ export default function Home() {
                                 propertyLatitude={latitude}
                                 propertyLongitude={longitude}
                                 events={events}
+                                hoveredEventId={hoveredEventId}
+                                onEventHover={setHoveredEventId}
                                 apiKey={mapsApiKey}
                               />
                             </div>
@@ -1000,205 +945,248 @@ export default function Home() {
 
                           {/* Events Table */}
                           <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-                            <div className="overflow-x-auto">
-                              <table className="w-full">
-                                <thead className="bg-slate-50 border-b border-slate-200">
-                                  <tr>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                      Event Name
-                                    </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                      Date & Time
-                                    </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                      Venue
-                                    </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                      Distance
-                                    </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                      <div className="flex items-center gap-1">
-                                        Type
-                                        <svg
-                                          className="w-3 h-3 text-slate-500"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          viewBox="0 0 24 24"
-                                        >
-                                          <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
-                                          />
-                                        </svg>
-                                      </div>
-                                    </th>
-                                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
-                                      Action
-                                    </th>
-                                  </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-slate-200">
-                                  {events
-                                    .filter((event) => {
-                                      if (eventFilter === "All") return true;
-                                      if (!event.start)
-                                        return eventFilter === "Upcoming";
-                                      const eventDate = new Date(event.start);
-                                      const now = new Date();
-                                      if (eventFilter === "Upcoming")
-                                        return eventDate >= now;
-                                      if (eventFilter === "Past")
-                                        return eventDate < now;
-                                      return true;
-                                    })
-                                    .map((event) => {
-                                      const distance =
-                                        latitude && longitude && event.venue
-                                          ? calculateDistance(
-                                              latitude,
-                                              longitude,
-                                              event.venue.latitude,
-                                              event.venue.longitude
-                                            ).toFixed(2) + " mi"
-                                          : "N/A";
+                            <table className="w-full table-fixed">
+                              <colgroup>
+                                <col className="w-[22%]" />
+                                <col className="w-[12%]" />
+                                <col className="w-[18%]" />
+                                <col className="w-[8%]" />
+                                <col className="w-[30%]" />
+                                <col className="w-[10%]" />
+                              </colgroup>
+                              <thead className="bg-slate-50 border-b border-slate-200">
+                                <tr>
+                                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                    Event Name
+                                  </th>
+                                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                    Date & Time
+                                  </th>
+                                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                    Venue
+                                  </th>
+                                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                    Distance
+                                  </th>
+                                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                    Contact
+                                  </th>
+                                  <th className="px-3 py-2.5 text-left text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                                    Action
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-slate-200">
+                                {events
+                                  .filter((event) => {
+                                    if (eventFilter === "All") return true;
+                                    if (!event.start)
+                                      return eventFilter === "Upcoming";
+                                    const eventDate = new Date(event.start);
+                                    const now = new Date();
+                                    if (eventFilter === "Upcoming")
+                                      return eventDate >= now;
+                                    if (eventFilter === "Past")
+                                      return eventDate < now;
+                                    return true;
+                                  })
+                                  .map((event) => {
+                                    const distance =
+                                      latitude && longitude && event.venue
+                                        ? calculateDistance(
+                                            latitude,
+                                            longitude,
+                                            event.venue.latitude,
+                                            event.venue.longitude
+                                          ).toFixed(2) + " mi"
+                                        : "N/A";
 
-                                      return (
-                                        <tr
-                                          key={event.id}
-                                          className="hover:bg-slate-50 transition-colors"
-                                        >
-                                          <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                              {event.logo && (
-                                                <img
-                                                  src={event.logo}
-                                                  alt={event.name}
-                                                  className="w-10 h-10 rounded-lg object-cover"
-                                                />
-                                              )}
-                                              <a
-                                                href={event.url || "#"}
-                                                target={
-                                                  event.url
-                                                    ? "_blank"
-                                                    : undefined
-                                                }
-                                                rel={
-                                                  event.url
-                                                    ? "noopener noreferrer"
-                                                    : undefined
-                                                }
-                                                className="text-blue-600 hover:text-blue-800 font-medium"
-                                              >
-                                                {event.name}
-                                              </a>
-                                            </div>
-                                          </td>
-                                          <td className="px-6 py-4 whitespace-nowrap text-slate-700">
-                                            {formatDate(event.start)}
-                                          </td>
-                                          <td className="px-6 py-4 text-slate-700">
-                                            {event.venue ? (
-                                              <div>
-                                                <div className="font-medium">
-                                                  {event.venue.name}
-                                                </div>
-                                                {event.venue.address && (
-                                                  <div className="text-xs text-slate-500">
-                                                    {event.venue.address}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            ) : (
-                                              <span className="text-slate-400">
-                                                —
-                                              </span>
+                                    return (
+                                      <tr
+                                        key={event.id}
+                                        className={`transition-colors ${
+                                          hoveredEventId === event.id
+                                            ? "bg-purple-50 border-l-4 border-purple-500"
+                                            : "hover:bg-slate-50"
+                                        }`}
+                                        onMouseEnter={() =>
+                                          setHoveredEventId(event.id)
+                                        }
+                                        onMouseLeave={() =>
+                                          setHoveredEventId(null)
+                                        }
+                                      >
+                                        <td className="px-3 py-2.5">
+                                          <div className="flex items-center gap-2">
+                                            {event.logo && (
+                                              <img
+                                                src={event.logo}
+                                                alt={event.name}
+                                                className="w-8 h-8 rounded-lg object-cover shrink-0"
+                                              />
                                             )}
-                                          </td>
-                                          <td className="px-6 py-4 whitespace-nowrap text-slate-700">
-                                            {distance}
-                                          </td>
-                                          <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center gap-2">
-                                              {event.is_free !== null && (
-                                                <span
-                                                  className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                                    event.is_free
-                                                      ? "bg-green-100 text-green-700"
-                                                      : "bg-yellow-100 text-yellow-700"
-                                                  }`}
+                                            <a
+                                              href={event.url || "#"}
+                                              target={
+                                                event.url ? "_blank" : undefined
+                                              }
+                                              rel={
+                                                event.url
+                                                  ? "noopener noreferrer"
+                                                  : undefined
+                                              }
+                                              className="text-blue-600 hover:text-blue-800 font-medium text-sm truncate"
+                                              title={event.name}
+                                            >
+                                              {event.name}
+                                            </a>
+                                          </div>
+                                        </td>
+                                        <td className="px-3 py-2.5 whitespace-nowrap text-slate-700 text-xs">
+                                          {formatDate(event.start)}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-slate-700">
+                                          {event.venue ? (
+                                            <div>
+                                              <div
+                                                className="font-medium text-sm truncate"
+                                                title={event.venue.name}
+                                              >
+                                                {event.venue.name}
+                                              </div>
+                                              {event.venue.address && (
+                                                <div
+                                                  className="text-xs text-slate-500 truncate"
+                                                  title={event.venue.address}
                                                 >
-                                                  {event.is_free
-                                                    ? "🆓 Free"
-                                                    : "💰 Paid"}
-                                                </span>
-                                              )}
-                                              {event.online_event && (
-                                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                                                  🌐 Online
-                                                </span>
+                                                  {event.venue.address}
+                                                </div>
                                               )}
                                             </div>
-                                          </td>
-                                          <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="flex items-center gap-1">
-                                              <button
-                                                className="w-8 h-8 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-100 transition-colors"
-                                                title="View Details"
-                                              >
-                                                <svg
-                                                  className="w-4 h-4 text-slate-900"
-                                                  fill="none"
-                                                  stroke="currentColor"
-                                                  viewBox="0 0 24 24"
-                                                  strokeWidth={2}
-                                                >
-                                                  <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                                                  />
-                                                  <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                                                  />
-                                                </svg>
-                                              </button>
-                                              {event.url && (
-                                                <button
-                                                  onClick={() =>
-                                                    window.open(
-                                                      event.url || "#",
-                                                      "_blank"
-                                                    )
-                                                  }
-                                                  className="w-8 h-8 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-100 transition-colors"
-                                                  title="Open Event"
-                                                >
+                                          ) : (
+                                            <span className="text-slate-400 text-xs">
+                                              —
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="px-3 py-2.5 whitespace-nowrap text-slate-700 text-xs">
+                                          {distance}
+                                        </td>
+                                        <td className="px-5 py-4">
+                                          {event.venueContact ? (
+                                            <div className="flex flex-col gap-3 pl-3 border-l-[3px] border-purple-300">
+                                              {event.venueContact.phone && (
+                                                <div className="flex items-center gap-3">
                                                   <svg
-                                                    className="w-4 h-4 text-slate-900"
+                                                    className="w-5 h-5 text-purple-600 shrink-0"
                                                     fill="none"
                                                     stroke="currentColor"
                                                     viewBox="0 0 24 24"
-                                                    strokeWidth={2}
                                                   >
                                                     <path
                                                       strokeLinecap="round"
                                                       strokeLinejoin="round"
-                                                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                                                      strokeWidth={2}
+                                                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
                                                     />
                                                   </svg>
-                                                </button>
+                                                  <a
+                                                    href={`tel:${event.venueContact.phone.replace(
+                                                      /\s/g,
+                                                      ""
+                                                    )}`}
+                                                    className="text-blue-600 hover:text-blue-800 text-sm font-medium truncate leading-relaxed"
+                                                    title={
+                                                      event.venueContact.phone
+                                                    }
+                                                  >
+                                                    {event.venueContact.phone}
+                                                  </a>
+                                                </div>
                                               )}
+                                              {event.venueContact.website && (
+                                                <div className="flex items-center gap-3">
+                                                  <svg
+                                                    className="w-5 h-5 text-purple-600 shrink-0"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    viewBox="0 0 24 24"
+                                                  >
+                                                    <path
+                                                      strokeLinecap="round"
+                                                      strokeLinejoin="round"
+                                                      strokeWidth={2}
+                                                      d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
+                                                    />
+                                                  </svg>
+                                                  <a
+                                                    href={
+                                                      event.venueContact.website
+                                                    }
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-blue-600 hover:text-blue-800 text-sm font-medium truncate leading-relaxed"
+                                                    title={event.venueContact.website.replace(
+                                                      /^https?:\/\//,
+                                                      ""
+                                                    )}
+                                                  >
+                                                    {
+                                                      event.venueContact.website
+                                                        .replace(
+                                                          /^https?:\/\//,
+                                                          ""
+                                                        )
+                                                        .split("/")[0]
+                                                    }
+                                                  </a>
+                                                </div>
+                                              )}
+                                            </div>
+                                          ) : (
+                                            <span className="text-slate-400 text-sm">
+                                              —
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="px-3 py-2.5 whitespace-nowrap">
+                                          <div className="flex items-center gap-0.5">
+                                            <button
+                                              className="w-7 h-7 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-100 transition-colors"
+                                              title="View Details"
+                                            >
+                                              <svg
+                                                className="w-3.5 h-3.5 text-slate-900"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                                strokeWidth={2}
+                                              >
+                                                <path
+                                                  strokeLinecap="round"
+                                                  strokeLinejoin="round"
+                                                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                                />
+                                                <path
+                                                  strokeLinecap="round"
+                                                  strokeLinejoin="round"
+                                                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                                                />
+                                              </svg>
+                                            </button>
+                                            {event.url && (
                                               <button
-                                                className="w-8 h-8 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-100 transition-colors"
-                                                title="Save"
+                                                onClick={() =>
+                                                  window.open(
+                                                    event.url || "#",
+                                                    "_blank"
+                                                  )
+                                                }
+                                                className="w-7 h-7 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-100 transition-colors"
+                                                title="Open Event"
                                               >
                                                 <svg
-                                                  className="w-4 h-4 text-slate-900"
+                                                  className="w-3.5 h-3.5 text-slate-900"
                                                   fill="none"
                                                   stroke="currentColor"
                                                   viewBox="0 0 24 24"
@@ -1207,18 +1195,36 @@ export default function Home() {
                                                   <path
                                                     strokeLinecap="round"
                                                     strokeLinejoin="round"
-                                                    d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+                                                    d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
                                                   />
                                                 </svg>
                                               </button>
-                                            </div>
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                </tbody>
-                              </table>
-                            </div>
+                                            )}
+                                            <button
+                                              className="w-7 h-7 flex items-center justify-center border border-slate-300 rounded hover:bg-slate-100 transition-colors"
+                                              title="Save"
+                                            >
+                                              <svg
+                                                className="w-3.5 h-3.5 text-slate-900"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                                strokeWidth={2}
+                                              >
+                                                <path
+                                                  strokeLinecap="round"
+                                                  strokeLinejoin="round"
+                                                  d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+                                                />
+                                              </svg>
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                              </tbody>
+                            </table>
                           </div>
 
                           {/* Load More Button */}

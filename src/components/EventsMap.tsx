@@ -57,6 +57,8 @@ interface EventsMapProps {
   propertyLatitude: number | null;
   propertyLongitude: number | null;
   events: Event[];
+  hoveredEventId?: string | null;
+  onEventHover?: (eventId: string | null) => void;
   apiKey: string;
 }
 
@@ -64,6 +66,8 @@ export default function EventsMap({
   propertyLatitude,
   propertyLongitude,
   events,
+  hoveredEventId,
+  onEventHover,
   apiKey,
 }: EventsMapProps) {
   const [selectedMarker, setSelectedMarker] = useState<string | null>(null);
@@ -248,6 +252,8 @@ export default function EventsMap({
                   fontSize: "16px",
                 }}
                 onClick={() => setSelectedMarker(eventMarkerId)}
+                onMouseOver={() => onEventHover?.(event.id)}
+                onMouseOut={() => onEventHover?.(null)}
               >
                 {selectedMarker === eventMarkerId && (
                   <InfoWindow onCloseClick={() => setSelectedMarker(null)}>

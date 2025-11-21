@@ -62,6 +62,7 @@ interface PropertyMapProps {
   longitude: number | null;
   nearbyBusinesses: Business[];
   hoveredBusinessId?: string | null;
+  onBusinessHover?: (businessId: string | null) => void;
   apiKey: string;
 }
 
@@ -72,6 +73,7 @@ export default function PropertyMap({
   longitude,
   nearbyBusinesses,
   hoveredBusinessId = null,
+  onBusinessHover,
   apiKey,
 }: PropertyMapProps) {
   const [selectedMarker, setSelectedMarker] = useState<string | null>(null);
@@ -261,6 +263,8 @@ export default function PropertyMap({
                       : undefined
                   }
                   onClick={() => setSelectedMarker(markerId)}
+                  onMouseOver={() => onBusinessHover?.(markerId)}
+                  onMouseOut={() => onBusinessHover?.(null)}
                 >
                   {selectedMarker === markerId && (
                     <InfoWindow onCloseClick={() => setSelectedMarker(null)}>
