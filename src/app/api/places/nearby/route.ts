@@ -42,34 +42,80 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Call Google Places API Nearby Search
-    const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=1000&type=establishment&key=${apiKey}`;
+    // Make multiple searches for diverse business types (same logic as /api/properties)
+    const businessTypes = [
+      "restaurant",
+      "cafe",
+      "gym",
+      "shopping_mall",
+      "store",
+      "bank",
+      "pharmacy",
+      "gas_station",
+      "park",
+      "school",
+      "hospital",
+      "beauty_salon",
+      "hair_care",
+      "spa",
+      "movie_theater",
+      "bar",
+      "night_club",
+      "lodging",
+      "real_estate_agency",
+      "lawyer",
+      "dentist",
+      "doctor",
+      "veterinary_care",
+      "car_repair",
+      "car_wash",
+    ];
 
-    const response = await fetch(url);
+    // Search for diverse businesses - get top results from multiple categories
+    // Search 15 categories, get top 2 from each = up to 30 diverse businesses
+    const searchPromises = businessTypes.slice(0, 15).map(async (type) => {
+      const placesUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=2000&type=${type}&key=${apiKey}`;
+      try {
+        const response = await fetch(placesUrl);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status === "OK" && data.results) {
+            // Return top 2 results from each category for diversity
+            return data.results.slice(0, 2);
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching ${type}:`, error);
+      }
+      return [];
+    });
 
-    if (!response.ok) {
-      throw new Error("Google Places API request failed");
-    }
+    const allResults = await Promise.all(searchPromises);
+    const flattenedResults = allResults.flat();
 
-    const data = await response.json();
+    // Remove duplicates by place_id
+    const uniqueResults = Array.from(
+      new Map(
+        flattenedResults.map((place: any) => [place.place_id, place])
+      ).values()
+    );
 
-    if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
-      throw new Error(`Google Places API error: ${data.status}`);
-    }
-
-    // Format the results
-    const results = (data.results || []).map((place: any) => ({
+    // Format the results (same format as before)
+    const results = uniqueResults.map((place: any) => ({
       name: place.name,
       types: place.types || [],
       rating: place.rating || null,
+      userRatingsTotal: place.user_ratings_total || null,
       vicinity: place.vicinity || place.formatted_address || "",
-      placeId: place.place_id,
-      geometry: place.geometry,
+      placeId: place.place_id || null,
+      priceLevel: place.price_level || null,
+      businessStatus: place.business_status || null,
+      geometry: place.geometry || null,
     }));
 
     return NextResponse.json({
       results,
-      status: data.status,
+      status: uniqueResults.length > 0 ? "OK" : "ZERO_RESULTS",
     });
   } catch (error) {
     console.error("Places API error:", error);
